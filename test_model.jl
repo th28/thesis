@@ -34,6 +34,7 @@ S = df2param(data["ShutdownCosts"])
 PC = df2param(data["Capacity"])
 L = df2param(data["LogisticCosts"])
 SC = df2param(data["StorageCosts"])
+ST = df2param(data["StorageCapacities"])
 PR = df2param(data["Prices"])
 WC = df2param(data["RawMaterialCosts"])
 EC = df2param(data["EnergyCosts"])
@@ -47,7 +48,7 @@ R = unique(data["RawMaterialCosts"][!,"RAW MATERIAL"])
 E = unique(data["EnergyCosts"].ENERGY)
 C = unique(data["CustomerDemand"].CUSTOMER)
 T = unique(data["CustomerDemand"].CALMONTH)
-L_arcs = Arc.(data["LogisticCosts"][!,1], data["LogisticCosts"][!,2]) #create an arc for each customer mill route available
+T_lag_fix = vcat([202200],T)
 
 # Mappings
 
@@ -70,61 +71,37 @@ mod = Model(HiGHS.Optimizer)
 
 # Integer decision variables
 @variable(mod, y[PM], Bin)
-T_lag_fix = vcat([202200],T)
 
 # Cont. decision variables
-@variable(mod, u[L_arcs, P,T] >= 0)
-@variable(mod, x[P,PM, T] >= 0)
-@variable(mod, I[P,M,T_lag_fix] >= 0)
+@variable(mod, x[P, PM, T, C] >= 0)
+@variable(mod, I[P, M , T_lag_fix, C] >= 0)
 
 # Objective components (linear expressions)
-@expression(mod, sales, sum(PR[t,i]*x[i,p,t] for i in P, p in PM, t in T))
-@expression(mod, pcost, sum(sum(WC[t,p,i,r] for r in prod_mat[i])*x[i,p,t] for i in P, p in PM, t in T))
-@expression(mod, icost, sum(SC[m]*I[p,m,t] for m in M, p in P, t in T))
-@expression(mod, lcost, sum(L[arc.c, arc.m]*u[arc,i,t] for i in P, t in T, arc in L_arcs))
-@expression(mod, ecost, sum(sum(EC[t,pm_mill[p],i,r] for r in prod_en[i])*x[i,p,t] for i in P, p in PM, t in T))
+@expression(mod, sales, sum(PR[t,i]*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
+@expression(mod, pcost, sum(sum(WC[t,p,i,r] for r in prod_mat[i])*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
+@expression(mod, icost, sum(SC[m]*I[i,m,t,c] for m in M, i in P, t in T, c in C))
+@expression(mod, lcost, sum(L[c,m]*x[i,p,t,c] for i in P, p in PM, t in T, c in C, m in M))
+@expression(mod, ecost, sum(sum(EC[t,pm_mill[p],i,r] for r in prod_en[i])*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
 
 # Objective function
-
 @objective(mod, Max, sales - pcost - icost - ecost - lcost)
 
 # Constraints
-
-@constraint(mod, [i in P, m in M], I[i,m,202200] == 0)
+@constraint(mod, [i in P, m in M,c in C], I[i,m,202200,c] == 0)
 # Demand satisfaction
-@constraint(mod, [t in T, i in P], sum(x[i,p,t] for p in PM) + sum(I[i,m,t-1] for m in M) == sum(D[t,c,i] for c in C) + sum(I[i,m,t] for m in M))
-
-# Distribution balance
-#@constraint(mod, [m in M, t in T], sum(x[i,p,t] for i in P, p in [p for p in PM if pm_mill[p] == m]) == sum(u[c,m,i,t] for c in C, i in P))
-@constraint(mod, [l in L_arcs, t in T], sum(x[i,p,t] for i in P, p in [p for p in PM if pm_mill[p] == l.m]) == sum(u[l,i,t] for i in P))
-
-# Customer-level demand satisfaction
-#@constraint(mod, [c in C, i in P, t in T], sum(u[c,m,i,t] for m in M) >= D[t,c,i])
-@constraint(mod, [l in L_arcs, i in P, t in T], u[l,i,t] >= D[t,l.c,i])
+@constraint(mod, [t in T, i in P, c in C], sum(x[i,p,t,c] for p in PM) + sum(I[i,m,t-1,c] for m in M) == D[t,c,i] + sum(I[i,m,t,c] for m in M))
 
 # Bounded inventory
-@constraint(mod, [m in M, t in T], sum(I[i,m,t] for i in P) <= 100)
+@constraint(mod, [m in M, t in T], sum(I[i,m,t,c] for i in P, c in C) <= ST[m])
 
 # Bounded capacity 
-@constraint(mod, [t in T, p in PM], sum(x[i,p,t] for i in P) <= PC[p])
+@constraint(mod, [t in T, p in PM], sum(x[i,p,t,c] for i in P, c in C) <= PC[p])
 
 optimize!(mod)
 
-
-# Print model
-for i in P
-    for p in PM
-        for t in T
-            println("x[" , i , "," , p , "," , t , "]" , " = " , value(x[i,p,t]))
-        end
-    end
-end
-
-u_df = convert_jump_container_to_df(u)
-insertcols!(u_df, 1, :Customer => getfield.(u_df[!,"dim1"], :c)) #XLSX cant export structs
-insertcols!(u_df, 2, :Mill => getfield.(u_df[!,"dim1"], :m))
-select!(u_df, Not(:dim1))
 x_df = convert_jump_container_to_df(x)
+rename!(x_df, [:Product, :PM, :Period, :Customer, :Amount])
 I_df = convert_jump_container_to_df(I)
-
-XLSX.writetable("results.xlsx", "Logistics" => u_df ,"Production" => x_df, "Inventory" => I_df)
+rename!(I_df, [:Product, :Mill, :Period, :Customer, :Amount])
+rm("results.xlsx")
+XLSX.writetable("results.xlsx", "Production" => x_df, "Inventory" => I_df)
