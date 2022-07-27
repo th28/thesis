@@ -27,7 +27,8 @@ for sheet in sheet_names
 end
 
 # Parameters
-
+a = df2param(data["RawMaterialConversion"])
+RP = df2param(data["RawMaterialPrices"])
 D = df2param(data["CustomerDemand"])
 F = df2param(data["FixedCosts"])
 S = df2param(data["ShutdownCosts"])
@@ -36,7 +37,7 @@ L = df2param(data["LogisticCosts"])
 SC = df2param(data["StorageCosts"])
 ST = df2param(data["StorageCapacities"])
 PR = df2param(data["Prices"])
-WC = df2param(data["RawMaterialCosts"])
+# WC = df2param(data["RawMaterialCosts"])
 EC = df2param(data["EnergyCosts"])
 
 # Sets 
@@ -44,7 +45,7 @@ EC = df2param(data["EnergyCosts"])
 M = unique(data["PM"].MILL)
 PM = unique(data["PM"].PM)
 P = unique(data["CustomerDemand"].PRODUCT)
-R = unique(data["RawMaterialCosts"][!,"RAW MATERIAL"])
+R = unique(data["RawMaterialPrices"][!,"RAW MATERIAL"])
 E = unique(data["EnergyCosts"].ENERGY)
 C = unique(data["CustomerDemand"].CUSTOMER)
 T = unique(data["CustomerDemand"].CALMONTH)
@@ -65,7 +66,7 @@ end
 
 # Model 
 
-mod = Model(HiGHS.Optimizer)
+mod = Model(GLPK.Optimizer)
 
 # Decision Variables
 
@@ -73,29 +74,39 @@ mod = Model(HiGHS.Optimizer)
 @variable(mod, y[PM], Bin)
 
 # Cont. decision variables
+@variable(mod, RB[T,R] >= 0) # raw material purchased at time T
+@variable(mod, RI[T_lag_fix, R, M] >= 0) # raw material inventory
 @variable(mod, x[P, PM, T, C] >= 0)
 @variable(mod, I[P, M , T_lag_fix, C] >= 0)
 
 # Objective components (linear expressions)
 @expression(mod, sales, sum(PR[t,i]*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
-@expression(mod, pcost, sum(sum(WC[t,p,i,r] for r in prod_mat[i])*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
-@expression(mod, icost, sum(SC[m]*I[i,m,t,c] for m in M, i in P, t in T, c in C))
+#@expression(mod, pcost, sum(sum(WC[t,p,i,r] for r in prod_mat[i])*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
+@expression(mod, rcost, sum(RP[t,r]*RB[t,r] for t in T, r in R))
+@expression(mod, icost, sum(SC[m]*I[i,m,t,c] for m in M, i in P, t in T, c in C) + sum(SC[m]*RI[t,r,m] for t in T, r in R, m in M))
 @expression(mod, lcost, sum(L[c,m]*x[i,p,t,c] for i in P, p in PM, t in T, c in C, m in M))
 @expression(mod, ecost, sum(sum(EC[t,pm_mill[p],i,r] for r in prod_en[i])*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
+@expression(mod, onoff, sum(F[p]*y[p] + S[p]*(1-y[p]) for p in PM))
 
 # Objective function
-@objective(mod, Max, sales - pcost - icost - ecost - lcost)
+@objective(mod, Max, sales - rcost - icost - ecost - lcost - onoff)
 
 # Constraints
-@constraint(mod, [i in P, m in M,c in C], I[i,m,202200,c] == 0)
-# Demand satisfaction
-@constraint(mod, [t in T, i in P, c in C], sum(x[i,p,t,c] for p in PM) + sum(I[i,m,t-1,c] for m in M) == D[t,c,i] + sum(I[i,m,t,c] for m in M))
+@constraint(mod, [i in P, m in M,c in C], I[i, m, 202200, c] == 0)
+@constraint(mod, [r in R, m in M], RI[202200, r, m] == 0)
 
-# Bounded inventory
-@constraint(mod, [m in M, t in T], sum(I[i,m,t,c] for i in P, c in C) <= ST[m])
+# Demand satisfaction
+@constraint(mod, [t in T, i in P, c in C], sum(x[i, p, t, c] for p in PM) + sum(I[i,m,t-1,c] for m in M) == D[t,c,i] + sum(I[i,m,t,c] for m in M))
+
+# Raw material balance
+@constraint(mod, [t in T, i in P, r in R], RB[t,r] + sum(RI[t-1, r, m] for m in M) 
+                        == sum(a[i,r]*x[i,p,t,c] for c in C, p in PM) + sum(RI[t,r,m] for m in M))
+
+# Bounded inventory       
+@constraint(mod, [m in M, t in T], sum(I[i, m, t, c] for i in P, c in C) + sum(RI[t, r, m] for t in T, r in R, m in M) <= ST[m])
 
 # Bounded capacity 
-@constraint(mod, [t in T, p in PM], sum(x[i,p,t,c] for i in P, c in C) <= PC[p])
+@constraint(mod, [t in T, p in PM], sum(x[i, p, t , c] for i in P, c in C) <= PC[p]*y[p])
 
 optimize!(mod)
 
@@ -103,5 +114,16 @@ x_df = convert_jump_container_to_df(x)
 rename!(x_df, [:Product, :PM, :Period, :Customer, :Amount])
 I_df = convert_jump_container_to_df(I)
 rename!(I_df, [:Product, :Mill, :Period, :Customer, :Amount])
+RB_df = convert_jump_container_to_df(RB)
+rename!(RB_df, [:Period, :RawMaterial, :Amount])
+RI_df = convert_jump_container_to_df(RI)
+rename!(RI_df, [:Period, :RawMaterial, :Mill, :Amount])
+y_df = convert_jump_container_to_df(y)
+rename!(y_df, [:PM, :Running])
+
 rm("results.xlsx")
-XLSX.writetable("results.xlsx", "Production" => x_df, "Inventory" => I_df)
+XLSX.writetable("results.xlsx", "Production" => x_df, 
+                                "Inventory" => I_df,
+                                "RawMaterial" => RB_df,
+                                "RawMaterialInventory" => RI_df,
+                                "PMRunning" => y_df)
