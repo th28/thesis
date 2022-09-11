@@ -4,18 +4,12 @@
 using JuMP
 using GLPK
 using HiGHS
+using Gurobi
 using DataFrames
 using XLSX
 using DisjunctiveProgramming
 
 include("utility.jl")
-
-# Data structures
-
-struct Arc
-    c::String
-    m::String
-end
 
 file = "deterministic_2cust_2mills.xlsx"
 
@@ -30,8 +24,10 @@ end
 # Parameters
 dacalim = df2param(data["DACA_limits"])
 dacapr = df2param(data["DACA_prices"])
+bulklim = df2param(data["BULK_limits"])
+bulkpr = df2param(data["BULK_prices"])
 a = df2param(data["RawMaterialConversion"])
-RP = df2param(data["RawMaterialPrices"])
+RP = df2param(data["RawMaterialPrices"]) #market rate prices used in fixed price contracts
 D = df2param(data["CustomerDemand"])
 F = df2param(data["FixedCosts"])
 S = df2param(data["ShutdownCosts"])
@@ -59,8 +55,8 @@ pm_mill = Dict(Pair.(data["PM"].PM, data["PM"].MILL))
 prod_mat = Dict()
 prod_en = Dict()
 
-for product in unique(data["RawMaterialCosts"].PRODUCT)
-    prod_mat[product] = unique(filter(:PRODUCT => ==(product), data["RawMaterialCosts"])[!,"RAW MATERIAL"])
+for product in unique(data["RawMaterialConversion"].PRODUCT)
+    prod_mat[product] = unique(filter(:PRODUCT => ==(product), data["RawMaterialConversion"])[!,"RAW MATERIAL"])
 end
 for product in unique(data["EnergyCosts"].PRODUCT)
     prod_en[product] = unique(filter(:PRODUCT => ==(product), data["EnergyCosts"])[!,"ENERGY"])
@@ -68,7 +64,7 @@ end
 
 # Model 
 
-mod = Model(GLPK.Optimizer)
+mod = Model(Gurobi.Optimizer)
 
 # Decision Variables
 
@@ -80,21 +76,22 @@ mod = Model(GLPK.Optimizer)
 # Cont. decision variables
 @variable(mod, RC[A,R,T] >= 0)
 # DACA contract ad-hoc variables
-@variable(mod, daca[["d1","d2"],R, T] >= 0)  #contract stage, raw mater. time period
-
-
-
+@variable(mod, daca[["d1","d2"],R, T] >= 0)  #how much raw material procured in each stage of contract. 
+                                             #Here d1 means the higher price and then when we breach the limit d2 is amount received at lower price
+# BULK contract ad-hoc variables 
+@variable(mod, rcost_bulk[R, T] >= 0)
 @variable(mod, RB[T,R] >= 0) # raw material purchased at time T
 @variable(mod, RI[T_lag_fix, R, M] >= 0) # raw material inventory
 @variable(mod, x[P, PM, T, C] >= 0)
 @variable(mod, I[P, M , T_lag_fix, C] >= 0)
 
 @expression(mod, rcost_f, sum(RP[t,r]*RC["FIXED",r, t] for r in R, t in T))
-@expression(mod, rcost_daca, sum(dacapr[t, "d1", r]*daca["d1", r, t] + dacapr[t, "d2", r]*daca["d1", r, t] for r in R, t in T))
+@expression(mod, rcost_daca, sum(dacapr[t, "d1", r]*daca["d1", r, t] + dacapr[t, "d2", r]*daca["d2", r, t] for r in R, t in T))
 # Objective components (linear expressions)
-@expression(mod, sales, sum(PR[t,i]*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
-#@expression(mod, rcost, sum(RP[t,r]*RB[t,r] for t in T, r in R))
-@expression(mod, rcost, rcost_f + rcost_daca)
+#@expression(mod, sales, sum(PR[t,i]*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
+@expression(mod, sales, sum(PR[t,i]*D[t,c,i] for i in P, t in T, c in C))
+# @expression(mod, rcost, sum(RP[t,r]*RB[t,r] for t in T, r in R))
+@expression(mod, rcost, rcost_f + rcost_daca + sum(rcost_bulk[r,t] for r in R, t in T))
 @expression(mod, icost, sum(SC[m]*I[i,m,t,c] for m in M, i in P, t in T, c in C) + sum(SC[m]*RI[t,r,m] for t in T, r in R, m in M))
 @expression(mod, lcost, sum(L[c,m]*x[i,p,t,c] for i in P, p in PM, t in T, c in C, m in M))
 @expression(mod, ecost, sum(sum(EC[t,pm_mill[p],i,r] for r in prod_en[i])*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
@@ -108,16 +105,42 @@ mod = Model(GLPK.Optimizer)
 #Only one contract allowed
 @constraint(mod, [t in T, r in R], sum(z[a, r, t] for a in A) <= 1)
 #Only exercise active Contracts
-@constraint(mod, [a in A, r in R, t in T], RC[a, r, t] <= 100000000*z[a, r, t] )
+@constraint(mod, [a in A, r in R, t in T], RC[a, r, t] <= 100000*z[a, r, t] )
 #Aggregate raw material purchases
 @constraint(mod, [t in T, r in R], RB[t,r] == sum(RC[a, r, t] for a in A))
 #DACA
 @constraint(mod, [r in R, t in T], RC["DACA", r, t] == daca["d1", r, t] + daca["d2", r, t])
 
+@constraint(mod, daca1_1[r in R, t in T], daca["d1", r, t] <= dacalim[t,r])
+@constraint(mod, daca1_2[r in R, t in T], daca["d2", r, t] == 0)
+@constraint(mod, daca2_1[r in R, t in T], daca["d1", r, t] == dacalim[t,r])
+@constraint(mod, daca2_2[r in R, t in T], 0 <= daca["d2", r, t])
 
+# abandon all hope all who enter here...
+# Consraints for DACA disjunction 
+for r in R
+    for t in T
+        local id = Symbol("daca_disjun_"*string(r)*string(t))
+        add_disjunction!(mod, (daca1_1[r,t], daca1_2[r,t]), (daca2_1[r,t], daca2_2[r,t]), reformulation=:big_m, name=id, M = 100000)
+        @constraint(mod,  z["DACA", r, t] == mod[id][1] + mod[id][2])
+    end
+end
 
+#BULK
+@constraint(mod, bulk1_1[r in R, t in T], rcost_bulk[r,t] == bulkpr[t, "b1", r]*RC["BULK", r, t])
+@constraint(mod, bulk1_2[r in R, t in T], 0 <= RC["BULK", r, t] <= bulklim[t, r] )
+@constraint(mod, bulk2_1[r in R, t in T], rcost_bulk[r,t] == bulkpr[t, "b2", r]*RC["BULK", r, t])
+@constraint(mod, bulk2_2[r in R, t in T], bulklim[t, r] <= RC["BULK", r, t] )
 
+for r in R
+    for t in T
+        local id = Symbol("bulk_disjun_"*string(r)*string(t))
+        add_disjunction!(mod, (bulk1_1[r,t], bulk1_2[r,t]), (bulk2_1[r,t], bulk2_2[r,t]), reformulation=:big_m, name=id, M = 100000)
+        @constraint(mod,  z["BULK", r, t] == mod[id][1] + mod[id][2])
+    end
+end
 
+#Date fixes
 @constraint(mod, [i in P, m in M,c in C], I[i, m, 202200, c] == 0)
 @constraint(mod, [r in R, m in M], RI[202200, r, m] == 0)
 
@@ -134,22 +157,37 @@ mod = Model(GLPK.Optimizer)
 # Bounded capacity 
 @constraint(mod, [t in T, p in PM], sum(x[i, p, t , c] for i in P, c in C) <= PC[p]*y[p])
 
+print("------------OPT START------------\n")
 optimize!(mod)
-
+print("------------OPT END------------\n")
 x_df = convert_jump_container_to_df(x)
 rename!(x_df, [:Product, :PM, :Period, :Customer, :Amount])
+
 I_df = convert_jump_container_to_df(I)
 rename!(I_df, [:Product, :Mill, :Period, :Customer, :Amount])
+
 RB_df = convert_jump_container_to_df(RB)
 rename!(RB_df, [:Period, :RawMaterial, :Amount])
+
 RI_df = convert_jump_container_to_df(RI)
 rename!(RI_df, [:Period, :RawMaterial, :Mill, :Amount])
+
 y_df = convert_jump_container_to_df(y)
 rename!(y_df, [:PM, :Running])
+
+z_df = convert_jump_container_to_df(z)
+rename!(z_df, [:Contract, :RawMaterial, :Period, :Used])
+
+rc_df = convert_jump_container_to_df(RC)
+rename!(rc_df, [:Contract, :RawMaterial, :Period, :Amount])
 
 rm("results.xlsx")
 XLSX.writetable("results.xlsx", "Production" => x_df, 
                                 "Inventory" => I_df,
                                 "RawMaterial" => RB_df,
                                 "RawMaterialInventory" => RI_df,
-                                "PMRunning" => y_df)
+                                "PMRunning" => y_df,
+                                "Contracts" => z_df,
+                                "RawMaterialContract" => rc_df)
+
+print("------------DONE------------\n")
