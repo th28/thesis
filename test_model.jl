@@ -22,6 +22,8 @@ for sheet in sheet_names
 end
 
 # Parameters
+fdlim = df2param(data["FD_prices"])
+fdpr = df2param(data["FD_limits"])
 dacalim = df2param(data["DACA_limits"])
 dacapr = df2param(data["DACA_prices"])
 bulklim = df2param(data["BULK_limits"])
@@ -80,6 +82,8 @@ mod = Model(Gurobi.Optimizer)
                                              #Here d1 means the higher price and then when we breach the limit d2 is amount received at lower price
 # BULK contract ad-hoc variables 
 @variable(mod, rcost_bulk[R, T] >= 0)
+@variable(mod, rcost_fd[R,T] >= 0)
+
 @variable(mod, RB[T,R] >= 0) # raw material purchased at time T
 @variable(mod, RI[T_lag_fix, R, M] >= 0) # raw material inventory
 @variable(mod, x[P, PM, T, C] >= 0)
@@ -91,7 +95,7 @@ mod = Model(Gurobi.Optimizer)
 #@expression(mod, sales, sum(PR[t,i]*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
 @expression(mod, sales, sum(PR[t,i]*D[t,c,i] for i in P, t in T, c in C))
 # @expression(mod, rcost, sum(RP[t,r]*RB[t,r] for t in T, r in R))
-@expression(mod, rcost, rcost_f + rcost_daca + sum(rcost_bulk[r,t] for r in R, t in T))
+@expression(mod, rcost, rcost_f + rcost_daca + sum(rcost_bulk[r,t] for r in R, t in T) + sum(rcost_fd[r,t] for r in R, t in T))
 @expression(mod, icost, sum(SC[m]*I[i,m,t,c] for m in M, i in P, t in T, c in C) + sum(SC[m]*RI[t,r,m] for t in T, r in R, m in M))
 @expression(mod, lcost, sum(L[c,m]*x[i,p,t,c] for i in P, p in PM, t in T, c in C, m in M))
 @expression(mod, ecost, sum(sum(EC[t,pm_mill[p],i,r] for r in prod_en[i])*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
@@ -139,6 +143,10 @@ for r in R
         @constraint(mod,  z["BULK", r, t] == mod[id][1] + mod[id][2])
     end
 end
+
+@constraint(mod, fd1_1[r in R, t in T], rcost_fd[r,t] == fdpr[t,r]*RC["FD", r, t])
+
+
 
 #Date fixes
 @constraint(mod, [i in P, m in M,c in C], I[i, m, 202200, c] == 0)
