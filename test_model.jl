@@ -110,7 +110,7 @@ mod = Model(Gurobi.Optimizer)
 #Contract Constraints
 #Only one contract allowed
 @constraint(mod, [t in T, r in R], sum(z[a, r, t] for a in A) <= 1)
-@constraint(mod,  z["FD", "R1", 202203] == 1)
+#@constraint(mod,  z["FD", "R1", 202203] == 1)
 #Only exercise active Contracts
 @constraint(mod, [a in A, r in R, t in T], RC[a, r, t] <= bigM*z[a, r, t] )
 #Aggregate raw material purchases
@@ -181,7 +181,7 @@ end
 #Date fixes
 @constraint(mod, [i in P, m in M,c in C], I[i, m, 202200, c] == 0)
 @constraint(mod, [r in R, m in M], RI[202200, r, m] == 0)
-#@constraint(mod, [r in R, t in [202213, 202214, 202215]], RC["FD", r, t] == 0)
+@constraint(mod, [r in R, t in [202213, 202214, 202215]], RC["FD", r, t] == 0)
 
 # Demand satisfaction
 @constraint(mod, [t in T, i in P, c in C], sum(x[i, p, t, c] for p in PM) + sum(I[i,m,t-1,c] for m in M) == D[t,c,i] + sum(I[i,m,t,c] for m in M))
@@ -201,24 +201,20 @@ optimize!(mod)
 print("------------OPT END------------\n")
 x_df = convert_jump_container_to_df(x)
 rename!(x_df, [:Product, :PM, :Period, :Customer, :Amount])
-
 I_df = convert_jump_container_to_df(I)
 rename!(I_df, [:Product, :Mill, :Period, :Customer, :Amount])
-
 RB_df = convert_jump_container_to_df(RB)
 rename!(RB_df, [:Period, :RawMaterial, :Amount])
-
 RI_df = convert_jump_container_to_df(RI)
 rename!(RI_df, [:Period, :RawMaterial, :Mill, :Amount])
-
 y_df = convert_jump_container_to_df(y)
 rename!(y_df, [:PM, :Running])
-
 z_df = convert_jump_container_to_df(z)
 rename!(z_df, [:Contract, :RawMaterial, :Period, :Used])
-
 rc_df = convert_jump_container_to_df(RC)
 rename!(rc_df, [:Contract, :RawMaterial, :Period, :Amount])
+rcost_fd_df = convert_jump_container_to_df(rcost_fd)
+rename!(rcost_fd_df, [:RawMaterial, :Period, :Amount])
 
 rm("results.xlsx")
 XLSX.writetable("results.xlsx", "Production" => x_df, 
@@ -227,6 +223,8 @@ XLSX.writetable("results.xlsx", "Production" => x_df,
                                 "RawMaterialInventory" => RI_df,
                                 "PMRunning" => y_df,
                                 "Contracts" => z_df,
-                                "RawMaterialContract" => rc_df)
+                                "RawMaterialContract" => rc_df,
+                                "RawMaterialPrices" => data["RawMaterialPrices"],
+                                "RawMaterialCosts_FD" => rcost_fd_df)
 
 print("------------DONE------------\n")
