@@ -49,12 +49,12 @@ R = unique(data["RawMaterialPrices"][!,"RAW MATERIAL"])
 E = unique(data["EnergyCosts"].ENERGY)
 C = unique(data["CustomerDemand"].CUSTOMER)
 T = unique(data["CustomerDemand"].CALMONTH)
-scn = unique(data["Scenarios"].SCENARIO)
+Scn = unique(data["Scenarios"].SCENARIO)
 T_lag_fix = vcat([202200],T)
 T_fd_fix = vcat(T, [202213, 202214, 202215])
 # Mappings
 
-
+Scn_no = len(Scn)
 
 pm_mill = Dict(Pair.(data["PM"].PM, data["PM"].MILL))
 prod_mat = Dict()
@@ -81,34 +81,35 @@ mod = Model(Gurobi.Optimizer)
 
 
 # Stage 2
-@variable(mod, y[PM], Bin)
+@variable(mod, y[PM], Bin, Scn)
 
 
 # Cont. decision variables
-@variable(mod, RC[A,R, T_fd_fix] >= 0)
+@variable(mod, RC[A,R, T_fd_fix, Scn] >= 0)
 # DACA contract ad-hoc variables
-@variable(mod, daca[["d1","d2"],R, T] >= 0)  #how much raw material procured in each stage of contract. 
+  
+@variable(mod, daca[["d1","d2"],R, T, Scn] >= 0)  #how much raw material procured in each stage of contract. 
                                             #Here d1 means the higher price and then when we breach the limit d2 is amount received at lower price
 # BULK contract contract variable
-@variable(mod, rcost_bulk[R, T] >= 0)
+@variable(mod, rcost_bulk[R, T, Scn] >= 0)
 # Fixed duration (FD) contract cost variable
-@variable(mod, rcost_fd[R, T_fd_fix] >= 0)
-@variable(mod, RB[T,R] >= 0) # raw material purchased at time T
-@variable(mod, RI[T_lag_fix, R, M] >= 0) # raw material inventory
-@variable(mod, x[P, PM, T, C] >= 0)
-@variable(mod, I[P, M , T_lag_fix, C] >= 0)
+@variable(mod, rcost_fd[R, T_fd_fix, Scn] >= 0)
+@variable(mod, RB[T,R, Scn] >= 0) # raw material purchased at time T
+@variable(mod, RI[T_lag_fix, R, M, Scn] >= 0) # raw material inventory
+@variable(mod, x[P, PM, T, C, Scn] >= 0)
+@variable(mod, I[P, M , T_lag_fix, C, Scn] >= 0)
 
-@expression(mod, rcost_f, sum(RP[t,r]*RC["FIXED",r, t] for r in R, t in T))
-@expression(mod, rcost_daca, sum(dacapr[t, "d1", r]*daca["d1", r, t] + dacapr[t, "d2", r]*daca["d2", r, t] for r in R, t in T))
-@expression(mod, sales, sum(PR[t,i]*D[t,c,i] for i in P, t in T, c in C))
-@expression(mod, rcost, rcost_f + rcost_daca + sum(rcost_bulk[r,t] for r in R, t in T) + sum(rcost_fd[r,t] for r in R, t in T))
-@expression(mod, icost, sum(SC[m]*I[i,m,t,c] for m in M, i in P, t in T, c in C) + sum(SC[m]*RI[t,r,m] for t in T, r in R, m in M))
-@expression(mod, lcost, sum(L[c,m]*x[i,p,t,c] for i in P, p in PM, t in T, c in C, m in M))
-@expression(mod, ecost, sum(sum(EC[t,pm_mill[p],i,r] for r in prod_en[i])*x[i,p,t,c] for i in P, p in PM, t in T, c in C))
-@expression(mod, onoff, sum(F[p]*y[p] + S[p]*(1-y[p]) for p in PM))
+@expression(mod, rcost_f, sum(RP[t,r]*RC["FIXED",r, t, s] for r in R, t in T, s in Scn))
+@expression(mod, rcost_daca, sum(dacapr[t, "d1", r]*daca["d1", r, t, s] + dacapr[t, "d2", r]*daca["d2", r, t, s] for r in R, t in T, s in Scn))
+@expression(mod, sales, sum(PR[t,i]*D[t,c,i, s] for i in P, t in T, c in C, s in Scn))
+@expression(mod, rcost, rcost_f + rcost_daca + sum(rcost_bulk[r,t, s] for r in R, t in T, s in Scn) + sum(rcost_fd[r,t, s] for r in R, t in T, s in Scn))
+@expression(mod, icost, sum(SC[m]*I[i,m,t,c, s] for m in M, i in P, t in T, c in C, s in Scn) + sum(SC[m]*RI[t,r,m, s] for t in T, r in R, m in M, s in Scn ))
+@expression(mod, lcost, sum(L[c,m]*x[i,p,t,c, s] for i in P, p in PM, t in T, c in C, m in M, s in Scn))
+@expression(mod, ecost, sum(sum(EC[t,pm_mill[p],i,r] for r in prod_en[i])*x[i,p,t,c,s] for i in P, p in PM, t in T, c in C, s in Scn))
+@expression(mod, onoff, sum(F[p]*y[p,s] + S[p]*(1-y[p,s]) for p in PM, s in Scn))
 
 # Objective function
-@objective(mod, Max, sales - rcost - icost - ecost - lcost - onoff)
+@objective(mod, Max, (1/Scn_no)*(sales - rcost - icost - ecost - lcost - onoff))
 
 # Constraints
 #Contract Constraints
