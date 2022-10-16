@@ -49,6 +49,7 @@ R = unique(data["RawMaterialPrices"][!,"RAW MATERIAL"])
 E = unique(data["EnergyCosts"].ENERGY)
 C = unique(data["CustomerDemand"].CUSTOMER)
 T = unique(data["CustomerDemand"].CALMONTH)
+scn = unique(data["Scenarios"].SCENARIO)
 T_lag_fix = vcat([202200],T)
 T_fd_fix = vcat(T, [202213, 202214, 202215])
 # Mappings
@@ -65,7 +66,7 @@ end
 for product in unique(data["EnergyCosts"].PRODUCT)
     prod_en[product] = unique(filter(:PRODUCT => ==(product), data["EnergyCosts"])[!,"ENERGY"])
 end
-
+  
 # Model 
 #big_m
 bigM = 1000000
@@ -74,7 +75,12 @@ mod = Model(Gurobi.Optimizer)
 # Decision Variables
 
 # Integer decision variables
+
+# Stage 1
 @variable(mod, z[A, R, T], Bin)
+
+
+# Stage 2
 @variable(mod, y[PM], Bin)
 
 
@@ -82,13 +88,11 @@ mod = Model(Gurobi.Optimizer)
 @variable(mod, RC[A,R, T_fd_fix] >= 0)
 # DACA contract ad-hoc variables
 @variable(mod, daca[["d1","d2"],R, T] >= 0)  #how much raw material procured in each stage of contract. 
-                                             #Here d1 means the higher price and then when we breach the limit d2 is amount received at lower price
+                                            #Here d1 means the higher price and then when we breach the limit d2 is amount received at lower price
 # BULK contract contract variable
 @variable(mod, rcost_bulk[R, T] >= 0)
 # Fixed duration (FD) contract cost variable
 @variable(mod, rcost_fd[R, T_fd_fix] >= 0)
-
-
 @variable(mod, RB[T,R] >= 0) # raw material purchased at time T
 @variable(mod, RI[T_lag_fix, R, M] >= 0) # raw material inventory
 @variable(mod, x[P, PM, T, C] >= 0)
