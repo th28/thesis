@@ -204,10 +204,10 @@ input_file["BULK_limits"] = gen_limits_prices(raw_materials=raw_materials, contr
 input_file["DACA_limits"] = gen_limits_prices(raw_materials=raw_materials, contract_stages="no_stages")
 input_file["DACA_prices"] = gen_limits_prices(raw_materials=raw_materials, contract_stages=daca_stages)
 input_file["PM"] = gen_pms_tab(pm_ct=pm_ct)
-input_file["CustomerDemand"] = gen_cust_dem_tab()
+input_file["CustomerDemand"] = gen_cust_dem_tab() #need to modify to take in real data
 input_file["FixedCosts"] = gen_fixed_costs()
 input_file["RawMaterialConversion"] = gen_raw_mat_conv()
-input_file["RawMaterialPrices"] = gen_raw_mat_prices()
+input_file["RawMaterialPrices"] = gen_raw_mat_prices() #modifty to take in real data
 input_file["ShutdownCosts"] = gen_fixed_costs()
 input_file["Capacity"] = gen_caps()
 input_file["LogisticCosts"] = gen_logistic_costs()
@@ -216,7 +216,7 @@ input_file["StorageCosts"] = gen_storage_caps()
 input_file["Prices"] = gen_prod_prices()
 input_file["EnergyCosts"] = gen_energy_costs()
 
-writer = pd.ExcelWriter('scenarios/input_file'+str(time.time())+'.xlsx', engine='openpyxl') 
+writer = pd.ExcelWriter('scenarios/input_file'+str(int(time.time()))+'.xlsx', engine='openpyxl') 
 
 for sheet_name, df in input_file.items():
     df.to_excel(writer, sheet_name=sheet_name, index=False)
