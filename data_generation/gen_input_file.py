@@ -3,6 +3,8 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import pandas as pd
 import random 
+import numpy as np
+from arch.bootstrap import MovingBlockBootstrap
 import time
 
 sheets = [
@@ -18,6 +20,15 @@ sheets = [
     'EnergyCosts'
 ]
 
+
+#pulprice raw material data
+pulp_prices = pd.read_excel(r'C:\Users\Tom\Documents\Thesis\dev\data_generation\pulp_prices.xls')
+pulp_prices["date"] = pd.to_datetime(pulp_prices["date"])
+pulp_prices.index = pulp_prices["date"]
+pulp_prices = pulp_prices.drop(columns=["date"])
+
+bs = MovingBlockBootstrap(3, pulp_prices)
+
 #parameters
 pm_ct = 4
 mill_ct = pm_ct
@@ -30,7 +41,7 @@ raw_materials = ["R"+str(i) for i in range(raw_mat_ct)]
 pms  = ["PM"+str(i) for i in range(pm_ct)]
 customers = ["C"+str(i) for i in range(cust_ct)]
 prods = ["P"+str(i) for i in range(prod_ct)]
-calmonths = [i + 202201 for i in range(12)]
+calmonths = [i + 202101 for i in range(12)]
 scns = ["S"+str(i) for i in range(scn_ct)]
 mills = ["M"+str(i) for i in range(mill_ct)]
 energy_comps = ["E"+str(i) for i in range(e_ct)]
@@ -125,12 +136,26 @@ def gen_raw_mat_conv():
     return df
 
 
+def gen_raw_mat_series(start='2021-01-01', end='2021-12-01'):
+    sample = None
+    for data in bs.bootstrap(1):
+        model_data = data[0][0]
+        model_data.index = pulp_prices.index
+        sample = model_data[(model_data.index >= start) & (model_data.index <= end) ]
+    
+    print(sample)
+    return sample
+
 def gen_raw_mat_prices():
-    df = pd.DataFrame(columns=["CALMONTH", "RAW MATERIAL", "METRIC"])
-    for r in raw_materials:
-        for c in calmonths:
-            row = {"CALMONTH": c, "RAW MATERIAL": r, "METRIC": random.random()}
-            df = df.append(row, ignore_index=True)
+    df = pd.DataFrame(columns=["CALMONTH", "RAW MATERIAL", "SCENARIO",  "METRIC"])
+    
+    for s in scns:
+        for r in raw_materials:
+            sample = gen_raw_mat_series() #bootstrap sampling 
+            for c in calmonths:
+                sample_value = sample[sample.index == str(c)[:4]+'-'+ str(c)[4:]+'-01']['pulp_price'].values[0]
+                row = {"CALMONTH": c, "RAW MATERIAL": r, "SCENARIO": s, "METRIC": sample_value}
+                df = df.append(row, ignore_index=True)
     return df
 
 #print(gen_raw_mat_prices())
@@ -168,7 +193,6 @@ def gen_caps():
 
 
 #storage costs use storage caps function
-
 def gen_prod_prices():
     df = pd.DataFrame(columns=["CALMONTH", "PRODUCT", "METRIC"])
     for c in calmonths:
@@ -179,7 +203,6 @@ def gen_prod_prices():
     return df
 
 #print(gen_prod_prices())
-
 def gen_energy_costs():
     df = pd.DataFrame(columns=["CALMONTH", "MILL", "PRODUCT", "ENERGY", "METRIC"])
     for c in calmonths:
