@@ -44,7 +44,7 @@ def gen_scenarios_tab(scn_ct):
     df = pd.DataFrame(columns=["SCENARIO","METRIC"])
 
     for i in range(scn_ct):
-        row = {"SCENARIO": "S"+str(i+1), "METRIC": prb}
+        row = {"SCENARIO": "S"+str(i), "METRIC": prb}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -216,7 +216,7 @@ input_file["StorageCosts"] = gen_storage_caps()
 input_file["Prices"] = gen_prod_prices()
 input_file["EnergyCosts"] = gen_energy_costs()
 
-writer = pd.ExcelWriter('scenarios/input_file'+str(int(time.time()))+'.xlsx', engine='openpyxl') 
+writer = pd.ExcelWriter('input_file'+str(int(time.time()))+'.xlsx', engine='openpyxl') 
 
 for sheet_name, df in input_file.items():
     df.to_excel(writer, sheet_name=sheet_name, index=False)

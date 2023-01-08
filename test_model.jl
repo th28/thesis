@@ -11,7 +11,8 @@ using DisjunctiveProgramming
 
 include("utility.jl")
 
-file = "stochastic_2cust_2mills.xlsx"
+#file = "stochastic_2cust_2mills.xlsx"
+file = "input_file1673159153.xlsx"
 
 xf = XLSX.readxlsx(file)
 sheet_names = XLSX.sheetnames(xf)
@@ -42,7 +43,7 @@ EC = df2param(data["EnergyCosts"])
 Prb = df2param(data["Scenarios"])
 
 # Sets 
-A = unique(data["Contracts"].CONTRACT)
+A = unique(data["Contracts"].CONTRACTS)
 M = unique(data["PM"].MILL)
 PM = unique(data["PM"].PM)
 P = unique(data["CustomerDemand"].PRODUCT)
