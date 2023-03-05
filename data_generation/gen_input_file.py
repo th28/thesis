@@ -6,6 +6,9 @@ import random
 import numpy as np
 from arch.bootstrap import MovingBlockBootstrap
 import time
+import os
+import math
+from pathlib import Path
 
 sheets = [
     'FixedCosts',
@@ -32,7 +35,7 @@ bs = MovingBlockBootstrap(3, pulp_prices)
 #parameters
 pm_ct = 4
 mill_ct = pm_ct
-scn_ct = 3
+scn_ct = 1
 cust_ct = 10
 prod_ct = 4
 e_ct = 4
@@ -100,38 +103,48 @@ def gen_pms_tab(pm_ct):
     
     return df
 
+
 #print(gen_pms_tab(pm_ct))
 
 def gen_cust_dem_tab():
     df = pd.DataFrame(columns=["CALMONTH", "CUSTOMER", "PRODUCT", "SCENARIO", "METRIC"])
+    s_rand = {}
+    for s in scns:
+        s_rand[s] = random.random()+1
+
     for c in customers:
-        for m in calmonths:
+        time_c = 5*random.random()
+        for mid, m in enumerate(calmonths):
             for p in prods:
+                prod_randomness = random.random()+1
                 for s in scns:
-                    demand = random.random()*100 + 1
+                    demand = s_rand[s]*100*math.sin(prod_randomness*mid + time_c + s_rand[s]) + s_rand[s]*100 + random.random() #seasonal trend in demand
+
                     row = {"CALMONTH": m, "CUSTOMER":c, "PRODUCT":p, "SCENARIO":s, "METRIC": demand}
                     df = df.append(row, ignore_index=True)
     
     return df
 
-#print(gen_cust_dem_tab())
-
 def gen_fixed_costs():
     df = pd.DataFrame(columns=["PM","METRIC"])
     for p in pms:
-        row = {"PM": p, "METRIC": 500*random.random()+10000.0}
+        row = {"PM": p, "METRIC": 0}
         df = df.append(row, ignore_index=True)
     
     return df
 
-#print(gen_fixed_costs())
-
 def gen_raw_mat_conv():
     df = pd.DataFrame(columns=["PRODUCT", "RAW MATERIAL", "METRIC"])
     for p in prods:
-        for r in raw_materials:
-            row = {"PRODUCT": p, "RAW MATERIAL": r, "METRIC": random.random()}
+        nums = [random.random() for r in raw_materials]
+        total = sum(nums)
+        nums = [num*(1/total) for num in nums] 
+
+        for ct, r in enumerate(raw_materials):
+            row = {"PRODUCT": p, "RAW MATERIAL": r, "METRIC": nums[ct]}
             df = df.append(row, ignore_index=True)
+        
+
 
     return df
 
@@ -143,7 +156,6 @@ def gen_raw_mat_series(start='2021-01-01', end='2021-12-01'):
         model_data.index = pulp_prices.index
         sample = model_data[(model_data.index >= start) & (model_data.index <= end) ]
     
-    print(sample)
     return sample
 
 def gen_raw_mat_prices():
@@ -177,7 +189,15 @@ def gen_logistic_costs():
 def gen_storage_caps():
     df = pd.DataFrame(columns=["MILL", "METRIC"])
     for m in mills:
-        row = {"MILL": m, "METRIC": random.random()}
+        row = {"MILL": m, "METRIC": 1000000000}
+        df = df.append(row, ignore_index=True)
+
+    return df
+
+def gen_storage_costs():
+    df = pd.DataFrame(columns=["MILL", "METRIC"])
+    for m in mills:
+        row = {"MILL": m, "METRIC": 1}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -185,7 +205,7 @@ def gen_storage_caps():
 def gen_caps():
     df = pd.DataFrame(columns=["PM", "METRIC"])
     for pm in pms:
-        row = {"PM": pm, "METRIC": random.random()}
+        row = {"PM": pm, "METRIC": 1000000000}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -197,7 +217,7 @@ def gen_prod_prices():
     df = pd.DataFrame(columns=["CALMONTH", "PRODUCT", "METRIC"])
     for c in calmonths:
         for p in prods:
-            row = {"CALMONTH":c, "PRODUCT": p, "METRIC": random.random()}
+            row = {"CALMONTH":c, "PRODUCT": p, "METRIC": 10000000000}
             df = df.append(row, ignore_index=True)
     
     return df
@@ -235,15 +255,23 @@ input_file["ShutdownCosts"] = gen_fixed_costs()
 input_file["Capacity"] = gen_caps()
 input_file["LogisticCosts"] = gen_logistic_costs()
 input_file["StorageCapacities"] = gen_storage_caps()
-input_file["StorageCosts"] = gen_storage_caps()
+input_file["StorageCosts"] = gen_storage_costs()
 input_file["Prices"] = gen_prod_prices()
 input_file["EnergyCosts"] = gen_energy_costs()
 
-writer = pd.ExcelWriter('input_file'+str(int(time.time()))+'.xlsx', engine='openpyxl') 
+
+input_path = Path('C:\\Users\\Tom\\Documents\\Thesis\\dev\\INPUT.xlsx')
+try:
+    os.remove(input_path)
+except OSError:
+    pass
+
+writer = pd.ExcelWriter(input_path, engine='openpyxl') 
 
 for sheet_name, df in input_file.items():
     df.to_excel(writer, sheet_name=sheet_name, index=False)
 
+
 writer.save()
-writer.close()
+#writer.close()
 

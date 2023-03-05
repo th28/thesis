@@ -44,3 +44,27 @@ function df2param(df)
     end
     return d
 end
+
+
+
+function invert_dict(dict, warning::Bool = false)
+    vals = collect(values(dict))
+    dict_length = length(unique(vals))
+
+  
+
+    linked_list = Array[]
+
+    for i in vals 
+        push!(linked_list,[])
+    end 
+
+    new_dict = Dict(zip(vals, linked_list))
+
+    for (key,val) in dict 
+        push!(new_dict[val],key)
+    end
+    
+
+    return new_dict
+end
