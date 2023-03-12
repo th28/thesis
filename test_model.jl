@@ -121,8 +121,7 @@ mod = Model(Gurobi.Optimizer)
 @expression(mod, demand_penality,  sum(demand_slack[i,p,t,c, s]*Prb[s] for i in P, p in PM, t in T, c in C, m in M, s in Scn))
 
 # Objective function
-@objective(mod, Max, sales - rcost - icost - ecost - lcost - onoff - 100000*demand_penality)
-
+@objective(mod, Max, sales - rcost - icost - ecost - lcost - onoff -5000*sum(slack[t,i,r,m,s] for t in T, i in P, r in R, m in M, s in Scn))
 
 # Constraints
 #Contract Constraints
@@ -204,26 +203,25 @@ for s in Scn
     end
 end 
 
-
 #Date fixes
 @constraint(mod, [i in P, m in M,c in C, s in Scn], I[i, m, 202100, c, s] == 0)
 @constraint(mod, [r in R, m in M, s in Scn], RI[202100, r, m, s] == 0)
 @constraint(mod, [r in R, t in [202113, 202114, 202115], m in M, s in Scn], RC["FD", r, t, m, s] == 0)
 
-# Demand satisfaction
+# Demand satisfaction, the demand slack indicates demand we could not fulfill. 
 @constraint(mod, [t in T, i in P, c in C, s in Scn], sum(x[i, p, t, c, s] for p in PM) + sum(I[i,m,t-1,c,s] for m in M) + sum(demand_slack[i,p,t,c,s] for p in PM) == D[t,c,i,s] + sum(I[i,m,t,c,s] for m in M) )
 
-# Raw material balance
-@constraint(mod, [t in T, i in P, r in R, m in M, s in Scn], sum(RC[a,r,t,m,s] for a in A) + RI[t-1, r, m, s] == a[i, r]*sum(x[i, p, t, c, s] for c in C, p in mill_pm[m]) + RI[t, r, m, s])
+# If we want to produce product i, with certain raw materials, we must have those on hand either by buying or in our raw material inventory 
+@constraint(mod, rbal[t in T, r in R, m in M, s in Scn], sum(RC[a,r,t,m,s] for a in A) + RI[t-1,r,m,s] == sum(a[i,r]*x[i, p, t, c, s] for c in C, i in P, p in mill_pm[m]) + RI[t,r,m,s] )
 
-# Bounded inventory       
+# Bounded inventory
 @constraint(mod, [m in M, t in T, s in Scn], sum(I[i, m, t, c, s] for i in P, c in C) + sum(RI[t, r, m, s] for r in R, m in M) <= ST[m])
 
 # Bounded capacity 
 @constraint(mod, [t in T, p in PM, s in Scn], sum(x[i, p, t , c, s] for i in P, c in C) <= PC[p]*y[p,s])
 
 print("------------DEFINING MODEL DONE------------\n")
-
+write_to_file(mod,"mylp.lp")
 print("------------OPT START------------\n")
 optimize!(mod)
 print("------------OPT DONE------------\n")
@@ -243,6 +241,8 @@ rcost_fd_df = convert_jump_container_to_df(rcost_fd)
 #rename!(rcost_fd_df, [:RawMaterial, :Period, :Amount])
 demand_slack_df = convert_jump_container_to_df(demand_slack)
 
+slack_df  =convert_jump_container_to_df(slack)
+
 
 print("------------RESULTS WRITING------------\n")
 
@@ -256,6 +256,7 @@ XLSX.writetable("RESULTS.xlsx", "Production" => x_df,
                                 "RawMaterialPrices" => data["RawMaterialPrices"],
                                 "RawMaterialCosts_FD" => rcost_fd_df,
                                 "DemandSlack" => demand_slack_df,
+                                "Slack"=> slack_df
                                 )
-
+write_to_file(mod,"mylp.lp")
 print("------------ALL DONE------------\n")

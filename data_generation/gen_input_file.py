@@ -33,13 +33,13 @@ pulp_prices = pulp_prices.drop(columns=["date"])
 bs = MovingBlockBootstrap(3, pulp_prices)
 
 #parameters
-pm_ct = 4
+pm_ct = 1
 mill_ct = pm_ct
 scn_ct = 1
-cust_ct = 10
-prod_ct = 4
-e_ct = 4
-raw_mat_ct = 5
+cust_ct = 1
+prod_ct = 2
+e_ct = 1
+raw_mat_ct = 2
 raw_materials = ["R"+str(i) for i in range(raw_mat_ct)]
 pms  = ["PM"+str(i) for i in range(pm_ct)]
 customers = ["C"+str(i) for i in range(cust_ct)]
@@ -189,7 +189,7 @@ def gen_logistic_costs():
 def gen_storage_caps():
     df = pd.DataFrame(columns=["MILL", "METRIC"])
     for m in mills:
-        row = {"MILL": m, "METRIC": 1000000000}
+        row = {"MILL": m, "METRIC": 100000}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -197,7 +197,7 @@ def gen_storage_caps():
 def gen_storage_costs():
     df = pd.DataFrame(columns=["MILL", "METRIC"])
     for m in mills:
-        row = {"MILL": m, "METRIC": 1}
+        row = {"MILL": m, "METRIC": 0}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -205,7 +205,7 @@ def gen_storage_costs():
 def gen_caps():
     df = pd.DataFrame(columns=["PM", "METRIC"])
     for pm in pms:
-        row = {"PM": pm, "METRIC": 1000000000}
+        row = {"PM": pm, "METRIC": 100000}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -217,7 +217,7 @@ def gen_prod_prices():
     df = pd.DataFrame(columns=["CALMONTH", "PRODUCT", "METRIC"])
     for c in calmonths:
         for p in prods:
-            row = {"CALMONTH":c, "PRODUCT": p, "METRIC": 10000000000}
+            row = {"CALMONTH":c, "PRODUCT": p, "METRIC": 1000}
             df = df.append(row, ignore_index=True)
     
     return df
