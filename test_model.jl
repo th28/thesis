@@ -11,8 +11,6 @@ using DisjunctiveProgramming
 
 include("utility.jl")
 
-#file = "stochastic_2cust_2mills.xlsx"
-
 print("------------READING INPUT DATA------------\n")
 
 file = "INPUT.xlsx"
@@ -79,7 +77,7 @@ print("------------DEFINING MODEL------------\n")
 
 # Model 
 #big_m
-bigM = 1000000
+bigM = 100000
 mod = Model(Gurobi.Optimizer)
 
 # Decision Variables
@@ -121,24 +119,24 @@ mod = Model(Gurobi.Optimizer)
 @expression(mod, demand_penality,  sum(demand_slack[i,p,t,c, s]*Prb[s] for i in P, p in PM, t in T, c in C, m in M, s in Scn))
 
 # Objective function
-@objective(mod, Max, sales - rcost - icost - ecost - lcost - onoff -5000*sum(slack[t,i,r,m,s] for t in T, i in P, r in R, m in M, s in Scn))
+@objective(mod, Max, sales - rcost - icost - ecost - lcost - onoff )
 
 # Constraints
-#Contract Constraints
-#Only one contract allowed
+# Contract Constraints
+# Only one contract allowed
 @constraint(mod, [t in T, r in R, m in M], sum(z[a, r, t, m] for a in A) <= 1)
 
-#Only exercise active Contracts
+# Only exercise active Contracts
 @constraint(mod, [a in A, r in R, t in T, m in M, s in Scn], RC[a, r, t, m, s] <= bigM*z[a, r, t, m] )
 
-#DACA
+# DACA
 @constraint(mod, [r in R, t in T,m in M, s in Scn], RC["DACA", r, t, m, s] == daca["d1", r, t, m, s] + daca["d2", r, t, m, s])
 @constraint(mod, daca1_1[r in R, t in T, m in M, s in Scn], daca["d1", r, t, m, s] <= dacalim[t,r])
 @constraint(mod, daca1_2[r in R, t in T, m in M, s in Scn], daca["d2", r, t, m, s] == 0)
 @constraint(mod, daca2_1[r in R, t in T, m in M, s in Scn], daca["d1", r, t, m, s] == dacalim[t,r])
 @constraint(mod, daca2_2[r in R, t in T, m in M, s in Scn], 0 <= daca["d2", r, t, m, s])
 
-#Add DACA contract disjunctions
+# Add DACA contract disjunctions
 for s in Scn
     for r in R
         for t in T
@@ -151,13 +149,13 @@ for s in Scn
     end
 end
 
-#BULK
+# BULK
 @constraint(mod, bulk1_1[r in R, t in T, m in M, s in Scn], rcost_bulk[r,t,m, s] == bulkpr[t, "b1", r]*RC["BULK", r, t,m, s])
 @constraint(mod, bulk1_2[r in R, t in T, m in M, s in Scn], 0 <= RC["BULK", r, t,m, s] <= bulklim[t, r] )
 @constraint(mod, bulk2_1[r in R, t in T, m in M, s in Scn], rcost_bulk[r,t,m, s ] == bulkpr[t, "b2", r]*RC["BULK", r, t,m, s ])
 @constraint(mod, bulk2_2[r in R, t in T, m in M, s in Scn], bulklim[t, r] <= RC["BULK", r, t, m, s] )
 
-#Add BULK contract disjunctions
+# Add BULK contract disjunctions
 for s in Scn
     for r in R
         for t in T
@@ -203,7 +201,7 @@ for s in Scn
     end
 end 
 
-#Date fixes
+# Date fixes
 @constraint(mod, [i in P, m in M,c in C, s in Scn], I[i, m, 202100, c, s] == 0)
 @constraint(mod, [r in R, m in M, s in Scn], RI[202100, r, m, s] == 0)
 @constraint(mod, [r in R, t in [202113, 202114, 202115], m in M, s in Scn], RC["FD", r, t, m, s] == 0)
@@ -226,22 +224,17 @@ print("------------OPT START------------\n")
 optimize!(mod)
 print("------------OPT DONE------------\n")
 x_df = convert_jump_container_to_df(x)
-#rename!(x_df, [:Product, :PM, :Period, :Customer, :Amount])
+rename!(x_df, [:Product, :PM, :Period, :Customer, :Scenario, :Amount])
 I_df = convert_jump_container_to_df(I)
-#rename!(I_df, [:Product, :Mill, :Period, :Customer, :Amount])
+rename!(I_df, [:Product, :Mill, :Period, :Customer, :Scenario, :Amount])
 RI_df = convert_jump_container_to_df(RI)
-#rename!(RI_df, [:Period, :RawMaterial, :Mill, :Amount])
+rename!(RI_df, [:Period, :RawMaterial, :Mill, :Scenario, :Amount])
 y_df = convert_jump_container_to_df(y)
-#rename!(y_df, [:PM, :Running])
+rename!(y_df, [:PM, :Scenario,  :Running])
 z_df = convert_jump_container_to_df(z)
-#rename!(z_df, [:Contract, :RawMaterial, :Period, :Used])
+rename!(z_df, [:Contract, :RawMaterial, :Period, :Mill, :Used])
 rc_df = convert_jump_container_to_df(RC)
-#rename!(rc_df, [:Contract, :RawMaterial, :Period, :Amount])
-rcost_fd_df = convert_jump_container_to_df(rcost_fd)
-#rename!(rcost_fd_df, [:RawMaterial, :Period, :Amount])
-demand_slack_df = convert_jump_container_to_df(demand_slack)
-
-slack_df  =convert_jump_container_to_df(slack)
+rename!(rc_df, [:Contract, :RawMaterial, :Period, :Mill, :Scenario, :Amount])
 
 
 print("------------RESULTS WRITING------------\n")
@@ -253,10 +246,7 @@ XLSX.writetable("RESULTS.xlsx", "Production" => x_df,
                                 "PMRunning" => y_df,
                                 "Contracts" => z_df,
                                 "RawMaterialContract" => rc_df,
-                                "RawMaterialPrices" => data["RawMaterialPrices"],
-                                "RawMaterialCosts_FD" => rcost_fd_df,
-                                "DemandSlack" => demand_slack_df,
-                                "Slack"=> slack_df
+                                "RawMaterialPrices" => data["RawMaterialPrices"]
                                 )
 write_to_file(mod,"mylp.lp")
 print("------------ALL DONE------------\n")

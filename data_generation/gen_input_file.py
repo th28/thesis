@@ -33,13 +33,13 @@ pulp_prices = pulp_prices.drop(columns=["date"])
 bs = MovingBlockBootstrap(3, pulp_prices)
 
 #parameters
-pm_ct = 1
+pm_ct = 5
 mill_ct = pm_ct
 scn_ct = 1
-cust_ct = 1
-prod_ct = 2
+cust_ct = 10
+prod_ct = 10
 e_ct = 1
-raw_mat_ct = 2
+raw_mat_ct = 5
 raw_materials = ["R"+str(i) for i in range(raw_mat_ct)]
 pms  = ["PM"+str(i) for i in range(pm_ct)]
 customers = ["C"+str(i) for i in range(cust_ct)]
@@ -233,6 +233,14 @@ def gen_energy_costs():
                     df = df.append(row, ignore_index=True)
     return df
 
+def gen_periods():
+    return pd.DataFrame(data=calmonths, columns=["Period"])
+
+def gen_custs():
+    return pd.DataFrame(data=customers, columns=["Customer"])
+
+def gen_mat():
+    return pd.DataFrame(data=raw_materials, columns=["RawMaterials"])
 
 fd_stages = ["l1","l2","l3"]
 bulk_stages = ["b1","b2"]
@@ -258,6 +266,11 @@ input_file["StorageCapacities"] = gen_storage_caps()
 input_file["StorageCosts"] = gen_storage_costs()
 input_file["Prices"] = gen_prod_prices()
 input_file["EnergyCosts"] = gen_energy_costs()
+
+input_file["Periods"] = gen_periods()
+input_file["Customers"] = gen_custs()
+input_file["RawMaterials"] = gen_mat()
+
 
 
 input_path = Path('C:\\Users\\Tom\\Documents\\Thesis\\dev\\INPUT.xlsx')
