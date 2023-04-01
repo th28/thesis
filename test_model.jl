@@ -211,7 +211,6 @@ end
 @constraint(mod, [t in T, i in P, c in C, s in Scn], sum(d[t, p, i, c, s] for p in PM) == D[t,c,i,s])
 
 # Demand satisfaction, the demand slack indicates demand we could not fulfill. 
-#@constraint(mod, [t in T, i in P, c in C, s in Scn], sum(x[i, p, t, c, s] for p in PM) + sum(I[i,m,t-1,c,s] for m in M) + sum(demand_slack[i,p,t,c,s] for p in PM) == D[t,c,i,s] + sum(I[i,m,t,c,s] for m in M) )
 @constraint(mod, [t in T, i in P, c in C, s in Scn, p in PM], x[i, p, t, c, s] + I[i, pm_mill[p], t-1 , c, s] + demand_slack[i, p, t, c, s] == d[t, p, i, c, s] + I[i, pm_mill[p], t, c, s] )
 
 # If we want to produce product i, with certain raw materials, we must have those on hand either by buying or in our raw material inventory 
