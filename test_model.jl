@@ -77,7 +77,7 @@ print("------------DEFINING MODEL------------\n")
 
 # Model 
 #big_m
-bigM = 100000
+bigM = 10000
 mod = Model(Gurobi.Optimizer)
 
 # Decision Variables
@@ -95,7 +95,7 @@ mod = Model(Gurobi.Optimizer)
 # Cont. decision variables
 @variable(mod, RC[A, R, T_fd_fix, M, Scn] >= 0) #raw material purchased by mill M under contract A at time t
 # DACA contract ad-hoc variables
-  
+
 @variable(mod, daca[["d1","d2"],R, T, M, Scn] >= 0)  #how much raw material procured in each stage of contract. 
                                             #Here d1 means the higher price and then when we breach the limit d2 is amount received at lower price
 # BULK contract contract variable
@@ -104,6 +104,7 @@ mod = Model(Gurobi.Optimizer)
 @variable(mod, rcost_fd[R, T_fd_fix, M, Scn] >= 0)
 @variable(mod, RI[T_lag_fix, R, M, Scn] >= 0) # raw material inventory
 @variable(mod, x[P, PM, T, C, Scn] >= 0)
+@variable(mod, d[T, PM, P, C, Scn] >= 0) #D[t,c,i,s]
 @variable(mod, I[P, M , T_lag_fix, C, Scn] >= 0)
 @variable(mod, demand_slack[P, PM, T, C, Scn] >=0)
 
@@ -206,8 +207,12 @@ end
 @constraint(mod, [r in R, m in M, s in Scn], RI[202100, r, m, s] == 0)
 @constraint(mod, [r in R, t in [202113, 202114, 202115], m in M, s in Scn], RC["FD", r, t, m, s] == 0)
 
+# Demand allocation, total demand for product i is allocated to PMs
+@constraint(mod, [t in T, i in P, c in C, s in Scn], sum(d[t, p, i, c, s] for p in PM) == D[t,c,i,s])
+
 # Demand satisfaction, the demand slack indicates demand we could not fulfill. 
-@constraint(mod, [t in T, i in P, c in C, s in Scn], sum(x[i, p, t, c, s] for p in PM) + sum(I[i,m,t-1,c,s] for m in M) + sum(demand_slack[i,p,t,c,s] for p in PM) == D[t,c,i,s] + sum(I[i,m,t,c,s] for m in M) )
+#@constraint(mod, [t in T, i in P, c in C, s in Scn], sum(x[i, p, t, c, s] for p in PM) + sum(I[i,m,t-1,c,s] for m in M) + sum(demand_slack[i,p,t,c,s] for p in PM) == D[t,c,i,s] + sum(I[i,m,t,c,s] for m in M) )
+@constraint(mod, [t in T, i in P, c in C, s in Scn, p in PM], x[i, p, t, c, s] + I[i, pm_mill[p], t-1 , c, s] + demand_slack[i, p, t, c, s] == d[t, p, i, c, s] + I[i, pm_mill[p], t, c, s] )
 
 # If we want to produce product i, with certain raw materials, we must have those on hand either by buying or in our raw material inventory 
 @constraint(mod, rbal[t in T, r in R, m in M, s in Scn], sum(RC[a,r,t,m,s] for a in A) + RI[t-1,r,m,s] == sum(a[i,r]*x[i, p, t, c, s] for c in C, i in P, p in mill_pm[m]) + RI[t,r,m,s] )

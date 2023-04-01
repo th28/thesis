@@ -9,6 +9,17 @@ import time
 import os
 import math
 from pathlib import Path
+import subprocess, sys
+import xlwings
+
+def save_excel_file(file_path):
+    # Open the Excel file
+    excel_app = xlwings.App(visible=False)
+    excel_book = excel_app.books.open(file_path)
+    excel_book.save()
+    excel_book.close()
+    excel_app.quit()
+
 
 sheets = [
     'FixedCosts',
@@ -33,13 +44,13 @@ pulp_prices = pulp_prices.drop(columns=["date"])
 bs = MovingBlockBootstrap(3, pulp_prices)
 
 #parameters
-pm_ct = 5
+pm_ct = 3
 mill_ct = pm_ct
 scn_ct = 1
-cust_ct = 10
-prod_ct = 10
+cust_ct = 2
+prod_ct = 2
 e_ct = 1
-raw_mat_ct = 5
+raw_mat_ct = 2
 raw_materials = ["R"+str(i) for i in range(raw_mat_ct)]
 pms  = ["PM"+str(i) for i in range(pm_ct)]
 customers = ["C"+str(i) for i in range(cust_ct)]
@@ -170,8 +181,6 @@ def gen_raw_mat_prices():
                 df = df.append(row, ignore_index=True)
     return df
 
-#print(gen_raw_mat_prices())
-
 #shutdown costs same as fixed cost
 #capacity same as fixed costs
 
@@ -183,8 +192,6 @@ def gen_logistic_costs():
             df = df.append(row, ignore_index=True)
 
     return df
-
-#print(gen_logistic_costs())
 
 def gen_storage_caps():
     df = pd.DataFrame(columns=["MILL", "METRIC"])
@@ -209,8 +216,6 @@ def gen_caps():
         df = df.append(row, ignore_index=True)
 
     return df
-#print(gen_storage_caps())
-
 
 #storage costs use storage caps function
 def gen_prod_prices():
@@ -222,7 +227,6 @@ def gen_prod_prices():
     
     return df
 
-#print(gen_prod_prices())
 def gen_energy_costs():
     df = pd.DataFrame(columns=["CALMONTH", "MILL", "PRODUCT", "ENERGY", "METRIC"])
     for c in calmonths:
@@ -241,6 +245,16 @@ def gen_custs():
 
 def gen_mat():
     return pd.DataFrame(data=raw_materials, columns=["RawMaterials"])
+
+#def save_excel_file(file_path):
+    # Open the Excel file
+#    wb = xlwings.Book(file_path)
+
+    # Save the Excel file
+    #wb.save()
+
+    # Close the Excel file
+    #wb.close()
 
 fd_stages = ["l1","l2","l3"]
 bulk_stages = ["b1","b2"]
@@ -286,5 +300,11 @@ for sheet_name, df in input_file.items():
 
 
 writer.save()
-#writer.close()
 
+
+#p = subprocess.Popen(["julia", 
+#              "C:\\Users\\Tom\\Documents\\Thesis\\dev\\test_model.jl"], 
+#              stdout=sys.stdout)
+#p.communicate()
+
+#save_excel_file(file_path='C:\\Users\\Tom\\Documents\\Thesis\\dev\\RESULTS.xlsx')
