@@ -5,15 +5,12 @@ import pandas as pd
 import random 
 import numpy as np
 from arch.bootstrap import MovingBlockBootstrap
-import time
 import os
 import math
 from pathlib import Path
-import subprocess, sys
 import xlwings
 
 def save_excel_file(file_path):
-    # Open the Excel file
     excel_app = xlwings.App(visible=False)
     excel_book = excel_app.books.open(file_path)
     excel_book.save()
@@ -44,7 +41,6 @@ pulp_prices = pulp_prices.drop(columns=["date"])
 bs = MovingBlockBootstrap(3, pulp_prices)
 
 #parameters
-
 
 #pm_ct = 5
 #mill_ct = pm_ct
@@ -85,14 +81,10 @@ def gen_scenarios_tab(scn_ct):
 
     return df
 
-#print(gen_scenarios_tab(40))
-
 def gen_contracts():
 
     df = pd.DataFrame(["FIXED","DACA","BULK","FD"],columns=["CONTRACTS"])
     return df
-
-#print(gen_contracts())
 
 def gen_limits(raw_materials):
     df = pd.DataFrame(columns=["CALMONTH", "RAW MATERIAL", "METRIC"])
@@ -136,9 +128,6 @@ def gen_fd_limits(raw_materials, contract_stages):
 
     return df
 
-    
-#print(gen_limits_prices(raw_materials, contract_stages = "no_stages"))
-
 def gen_pms_tab(pm_ct):
     df = pd.DataFrame(columns=["MILL","PM"])
     for pm in range(pm_ct):
@@ -146,9 +135,6 @@ def gen_pms_tab(pm_ct):
         df = df.append(row, ignore_index=True)
     
     return df
-
-
-#print(gen_pms_tab(pm_ct))
 
 def gen_cust_dem_tab():
     df = pd.DataFrame(columns=["CALMONTH", "CUSTOMER", "PRODUCT", "SCENARIO", "METRIC"])
@@ -187,9 +173,7 @@ def gen_raw_mat_conv():
         for ct, r in enumerate(raw_materials):
             row = {"PRODUCT": p, "RAW MATERIAL": r, "METRIC": nums[ct]}
             df = df.append(row, ignore_index=True)
-        
-
-
+    
     return df
 
 
@@ -205,7 +189,6 @@ def gen_raw_mat_series(start='2021-01-01', end='2021-12-01'):
 def gen_raw_mat_prices():
     df = pd.DataFrame(columns=["CALMONTH", "RAW MATERIAL", "SCENARIO",  "METRIC"])
     
-    
     for s in scns:
         for r in raw_materials:
             sample = gen_raw_mat_series() #bootstrap sampling 
@@ -218,9 +201,6 @@ def gen_raw_mat_prices():
     
 
     return df
-
-#shutdown costs same as fixed cost
-#capacity same as fixed costs
 
 def gen_logistic_costs():
     df = pd.DataFrame(columns=["CUSTOMER", "MILL", "METRIC"])
@@ -255,7 +235,6 @@ def gen_caps():
 
     return df
 
-#storage costs use storage caps function
 def gen_prod_prices():
     df = pd.DataFrame(columns=["CALMONTH", "PRODUCT", "METRIC"])
     for c in calmonths:
@@ -293,12 +272,12 @@ input_file["Scenarios"] = gen_scenarios_tab(scn_ct)
 input_file["Contracts"] = gen_contracts()
 
 input_file["PM"] = gen_pms_tab(pm_ct=pm_ct)
-input_file["CustomerDemand"] = gen_cust_dem_tab() #need to modify to take in real data
+input_file["CustomerDemand"] = gen_cust_dem_tab() 
 input_file["FixedCosts"] = gen_fixed_costs()
 input_file["RawMaterialConversion"] = gen_raw_mat_conv()
 raw_mat_prices = gen_raw_mat_prices()
 raw_mat_prices_avgs = raw_mat_prices[['CALMONTH','RAW MATERIAL', 'METRIC']].groupby(['CALMONTH', 'RAW MATERIAL']).mean().reset_index()
-input_file["RawMaterialPrices"] = raw_mat_prices #modify to take in real data
+input_file["RawMaterialPrices"] = raw_mat_prices 
 
 input_file["FD_limits"] = gen_fd_limits(raw_materials=raw_materials, contract_stages=fd_stages)
 input_file["BULK_limits"] = gen_limits(raw_materials=raw_materials)
@@ -333,10 +312,3 @@ for sheet_name, df in input_file.items():
 
 writer.save()
 
-
-#p = subprocess.Popen(["julia", 
-#              "C:\\Users\\Tom\\Documents\\Thesis\\dev\\test_model.jl"], 
-#              stdout=sys.stdout)
-#p.communicate()
-
-#save_excel_file(file_path='C:\\Users\\Tom\\Documents\\Thesis\\dev\\RESULTS.xlsx')
