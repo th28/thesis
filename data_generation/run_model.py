@@ -14,7 +14,7 @@ def save_excel_file(file_path):
     excel_app.quit()
   
 p = subprocess.Popen(["julia", 
-              "C:\\Users\\Tom\\Documents\\Thesis\\dev\\test_model.jl"], 
+              "C:\\Users\\Tom\\Documents\\Thesis\\dev\\model.jl"], 
               stdout=sys.stdout)    
 p.communicate()
 
