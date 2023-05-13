@@ -44,13 +44,24 @@ pulp_prices = pulp_prices.drop(columns=["date"])
 bs = MovingBlockBootstrap(3, pulp_prices)
 
 #parameters
-pm_ct = 3
+
+
+#pm_ct = 5
+#mill_ct = pm_ct
+#scn_ct = 6
+#cust_ct = 4
+#prod_ct = 3
+#e_ct = 1
+#raw_mat_ct = 3
+
+pm_ct = 2
 mill_ct = pm_ct
-scn_ct = 1
+scn_ct = 2
 cust_ct = 2
 prod_ct = 2
 e_ct = 1
 raw_mat_ct = 2
+
 raw_materials = ["R"+str(i) for i in range(raw_mat_ct)]
 pms  = ["PM"+str(i) for i in range(pm_ct)]
 customers = ["C"+str(i) for i in range(cust_ct)]
@@ -83,26 +94,48 @@ def gen_contracts():
 
 #print(gen_contracts())
 
-def gen_limits_prices(raw_materials, contract_stages):
-    if contract_stages == "no_stages":
-        df = pd.DataFrame(columns=["CALMONTH", "RAW MATERIAL", "METRIC"])
-        for r in raw_materials:
-            for m in calmonths:
-                lim = random.random()*100 + 1
-                row  = {"CALMONTH":m, "RAW MATERIAL": r, "METRIC": lim}
-                df = df.append(row, ignore_index=True)
+def gen_limits(raw_materials):
+    df = pd.DataFrame(columns=["CALMONTH", "RAW MATERIAL", "METRIC"])
+    for r in raw_materials:
+        for m in calmonths:
+            lim = random.random()*100 + 1
+            row  = {"CALMONTH":m, "RAW MATERIAL": r, "METRIC": lim}
+            df = df.append(row, ignore_index=True)
 
-        return df
-    else:
-        df = pd.DataFrame(columns=["CALMONTH", "TYPE", "RAW MATERIAL", "METRIC"])
-        for r in raw_materials:
-            for c in contract_stages:
-                for m in calmonths:
-                    lim = random.random()*100 + 1
-                    row  = {"CALMONTH":m, "TYPE": c, "RAW MATERIAL": r, "METRIC": lim}
+    return df
+
+def gen_prices(raw_materials, contract_stages, spot_prices):
+    df = pd.DataFrame(columns=["CALMONTH", "TYPE", "RAW MATERIAL", "METRIC"])
+    for r in raw_materials:
+        for m in calmonths:
+            for idx, c in enumerate(contract_stages):
+                rates = [1.0,.9,.8]
+                price = spot_prices.loc[(spot_prices['CALMONTH']==m) & (spot_prices['RAW MATERIAL']==r)][['METRIC']].values[0][0]
+                if idx == 0:
+                    discount_factor = random.uniform(0.75,0.9)
+                    row  = {"CALMONTH":m, "TYPE": c, "RAW MATERIAL": r, "METRIC": price}
+                    df = df.append(row, ignore_index=True)
+                else:
+                    
+                    row  = {"CALMONTH":m, "TYPE": c, "RAW MATERIAL": r, "METRIC": rates[idx]*discount_factor*price}
                     df = df.append(row, ignore_index=True)
 
-        return df
+    return df
+
+
+def gen_fd_limits(raw_materials, contract_stages):
+    df = pd.DataFrame(columns=["CALMONTH", "TYPE", "RAW MATERIAL", "METRIC"])
+    for r in raw_materials:
+        for m in calmonths:
+            for idx, c in enumerate(contract_stages):
+                
+                if idx == 0: minimum_buy = random.uniform(10,100)
+                rates = [1,1.25,1.50]
+                row  = {"CALMONTH":m, "TYPE": c, "RAW MATERIAL": r, "METRIC": rates[idx]*minimum_buy}
+                df = df.append(row, ignore_index=True)
+
+    return df
+
     
 #print(gen_limits_prices(raw_materials, contract_stages = "no_stages"))
 
@@ -172,6 +205,7 @@ def gen_raw_mat_series(start='2021-01-01', end='2021-12-01'):
 def gen_raw_mat_prices():
     df = pd.DataFrame(columns=["CALMONTH", "RAW MATERIAL", "SCENARIO",  "METRIC"])
     
+    
     for s in scns:
         for r in raw_materials:
             sample = gen_raw_mat_series() #bootstrap sampling 
@@ -179,6 +213,10 @@ def gen_raw_mat_prices():
                 sample_value = sample[sample.index == str(c)[:4]+'-'+ str(c)[4:]+'-01']['pulp_price'].values[0]
                 row = {"CALMONTH": c, "RAW MATERIAL": r, "SCENARIO": s, "METRIC": sample_value}
                 df = df.append(row, ignore_index=True)
+
+   
+    
+
     return df
 
 #shutdown costs same as fixed cost
@@ -246,15 +284,6 @@ def gen_custs():
 def gen_mat():
     return pd.DataFrame(data=raw_materials, columns=["RawMaterials"])
 
-#def save_excel_file(file_path):
-    # Open the Excel file
-#    wb = xlwings.Book(file_path)
-
-    # Save the Excel file
-    #wb.save()
-
-    # Close the Excel file
-    #wb.close()
 
 fd_stages = ["l1","l2","l3"]
 bulk_stages = ["b1","b2"]
@@ -262,17 +291,23 @@ daca_stages = ["d1","d2"]
 
 input_file["Scenarios"] = gen_scenarios_tab(scn_ct)
 input_file["Contracts"] = gen_contracts()
-input_file["FD_limits"] = gen_limits_prices(raw_materials=raw_materials, contract_stages=fd_stages)
-input_file["FD_prices"] = gen_limits_prices(raw_materials=raw_materials, contract_stages=fd_stages)
-input_file["BULK_prices"] = gen_limits_prices(raw_materials=raw_materials, contract_stages=bulk_stages)
-input_file["BULK_limits"] = gen_limits_prices(raw_materials=raw_materials, contract_stages="no_stages")
-input_file["DACA_limits"] = gen_limits_prices(raw_materials=raw_materials, contract_stages="no_stages")
-input_file["DACA_prices"] = gen_limits_prices(raw_materials=raw_materials, contract_stages=daca_stages)
+
 input_file["PM"] = gen_pms_tab(pm_ct=pm_ct)
 input_file["CustomerDemand"] = gen_cust_dem_tab() #need to modify to take in real data
 input_file["FixedCosts"] = gen_fixed_costs()
 input_file["RawMaterialConversion"] = gen_raw_mat_conv()
-input_file["RawMaterialPrices"] = gen_raw_mat_prices() #modifty to take in real data
+raw_mat_prices = gen_raw_mat_prices()
+raw_mat_prices_avgs = raw_mat_prices[['CALMONTH','RAW MATERIAL', 'METRIC']].groupby(['CALMONTH', 'RAW MATERIAL']).mean().reset_index()
+input_file["RawMaterialPrices"] = raw_mat_prices #modify to take in real data
+
+input_file["FD_limits"] = gen_fd_limits(raw_materials=raw_materials, contract_stages=fd_stages)
+input_file["BULK_limits"] = gen_limits(raw_materials=raw_materials)
+input_file["DACA_limits"] = gen_limits(raw_materials=raw_materials)
+
+input_file["DACA_prices"] = gen_prices(raw_materials=raw_materials, contract_stages=daca_stages, spot_prices=raw_mat_prices_avgs)
+input_file["FD_prices"] = gen_prices(raw_materials=raw_materials, contract_stages=fd_stages, spot_prices=raw_mat_prices_avgs)
+input_file["BULK_prices"] = gen_prices(raw_materials=raw_materials, contract_stages=bulk_stages, spot_prices=raw_mat_prices_avgs)
+
 input_file["ShutdownCosts"] = gen_fixed_costs()
 input_file["Capacity"] = gen_caps()
 input_file["LogisticCosts"] = gen_logistic_costs()
@@ -280,12 +315,9 @@ input_file["StorageCapacities"] = gen_storage_caps()
 input_file["StorageCosts"] = gen_storage_costs()
 input_file["Prices"] = gen_prod_prices()
 input_file["EnergyCosts"] = gen_energy_costs()
-
 input_file["Periods"] = gen_periods()
 input_file["Customers"] = gen_custs()
 input_file["RawMaterials"] = gen_mat()
-
-
 
 input_path = Path('C:\\Users\\Tom\\Documents\\Thesis\\dev\\INPUT.xlsx')
 try:
