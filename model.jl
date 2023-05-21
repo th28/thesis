@@ -80,6 +80,7 @@ print("------------DEFINING MODEL------------\n")
 bigM = 10000
 mod = Model(Gurobi.Optimizer)
 
+
 # Decision Variables
 
 # Integer decision variables
@@ -121,11 +122,13 @@ mod = Model(Gurobi.Optimizer)
 
 # Objective function
 @objective(mod, Max, sales - rcost - icost - ecost - lcost - onoff )
-
+#  2.396704337962e+06
+#  2.471361033682e+06
 # Constraints
 # Contract Constraints
 # Only one contract allowed
 @constraint(mod, [t in T, r in R, m in M], sum(z[a, r, t, m] for a in A) <= 1)
+#@constraint(mod, z["FD","R0",202101,"M0"] == 1)
 
 # Only exercise active Contracts
 @constraint(mod, [a in A, r in R, t in T, m in M, s in Scn], RC[a, r, t, m, s] <= bigM*z[a, r, t, m] )
@@ -225,6 +228,7 @@ end
 print("------------DEFINING MODEL DONE------------\n")
 write_to_file(mod,"mylp.lp")
 print("------------OPT START------------\n")
+set_optimizer_attribute(mod, "MIPFocus", 2)
 optimize!(mod)
 print("------------OPT DONE------------\n")
 x_df = convert_jump_container_to_df(x)
