@@ -1,5 +1,5 @@
 
-# Basic production model to build off
+# A basic production planning model using disjunctive programming to model raw material contracts
 # Tom H 
 using JuMP
 using GLPK
@@ -55,8 +55,8 @@ T = unique(data["CustomerDemand"].CALMONTH)
 Scn = unique(data["Scenarios"].SCENARIO)
 T_lag_fix = vcat([202100],T)
 T_fd_fix = vcat(T, [202113, 202114, 202115])
-# Mappings
 
+# Mappings
 Scn_no = length(Scn)
 pm_mill = Dict(Pair.(data["PM"].PM, data["PM"].MILL))
 mill_pm = invert_dict(pm_mill)
@@ -77,7 +77,7 @@ print("------------DEFINING MODEL------------\n")
 
 # Model 
 #big_m
-bigM = 10000
+bigM = 100000
 mod = Model(Gurobi.Optimizer)
 
 
@@ -86,7 +86,7 @@ mod = Model(Gurobi.Optimizer)
 # Integer decision variables
 
 # Stage 1
-@variable(mod, z[A, R, T, M], Bin)
+@variable(mod, z[A, R, T_fd_fix, M], Bin)
 
 
 # Stage 2
@@ -102,12 +102,18 @@ mod = Model(Gurobi.Optimizer)
 # BULK contract contract variable
 @variable(mod, rcost_bulk[R, T, M, Scn] >= 0)
 # Fixed duration (FD) contract cost variable
-@variable(mod, rcost_fd[R, T_fd_fix, M, Scn] >= 0)
+
 @variable(mod, RI[T_lag_fix, R, M, Scn] >= 0) # raw material inventory
 @variable(mod, x[P, PM, T, C, Scn] >= 0)
 @variable(mod, d[T, PM, P, C, Scn] >= 0) #D[t,c,i,s]
 @variable(mod, I[P, M , T_lag_fix, C, Scn] >= 0)
 @variable(mod, demand_slack[P, PM, T, C, Scn] >=0)
+@variable(mod, fd_cost_tot>=0)
+@variable(mod, rcost_fd[R, T_fd_fix, M, Scn] >= 0)
+
+@variable(mod, slack2_1[R,T_fd_fix,M], Bin)
+@variable(mod, slack3_1[R,T_fd_fix,M], Bin)
+@variable(mod, slack3_2[R,T_fd_fix,M], Bin)
 
 # Expressions
 @expression(mod, rcost_f, sum(RP[t,r,s]*RC["FIXED",r, t, m, s]*Prb[s] for r in R, t in T, m in M,s in Scn))
@@ -118,20 +124,24 @@ mod = Model(Gurobi.Optimizer)
 @expression(mod, lcost, sum(L[c,m]*x[i,p,t,c, s]*Prb[s] for i in P, p in PM, t in T, c in C, m in M, s in Scn))
 @expression(mod, ecost, sum(sum(EC[t,pm_mill[p],i,r] for r in prod_en[i])*x[i,p,t,c,s]*Prb[s] for i in P, p in PM, t in T, c in C, s in Scn))
 @expression(mod, onoff, sum((F[p]*y[p,s] + S[p]*(1-y[p,s]))*Prb[s] for p in PM, s in Scn))
-@expression(mod, demand_penality,  sum(demand_slack[i,p,t,c, s]*Prb[s] for i in P, p in PM, t in T, c in C, m in M, s in Scn))
+@expression(mod, demand_penality,  sum(demand_slack[i, p , t , c ,s]*Prb[s] for i in P, p in PM, t in T, c in C, m in M, s in Scn))
 
 # Objective function
 @objective(mod, Max, sales - rcost - icost - ecost - lcost - onoff )
-#  2.396704337962e+06
-#  2.471361033682e+06
+
 # Constraints
+
 # Contract Constraints
+
 # Only one contract allowed
 @constraint(mod, [t in T, r in R, m in M], sum(z[a, r, t, m] for a in A) <= 1)
-#@constraint(mod, z["FD","R0",202101,"M0"] == 1)
 
 # Only exercise active Contracts
 @constraint(mod, [a in A, r in R, t in T, m in M, s in Scn], RC[a, r, t, m, s] <= bigM*z[a, r, t, m] )
+
+
+# How the DisjunctiveProgramming.jl module works is that first you define the constraints as you would usually do. Then add_disjunction! reads in
+# the constraints and uses them to formulate the MILP constraints. They are deleted from the original model and only used as input for the reformulation
 
 # DACA
 @constraint(mod, [r in R, t in T,m in M, s in Scn], RC["DACA", r, t, m, s] == daca["d1", r, t, m, s] + daca["d2", r, t, m, s])
@@ -176,18 +186,25 @@ end
 #1 month
 @constraint(mod, fd1_1[r in R, t in T,m in M, s in Scn], rcost_fd[r,t,m,s] == fdpr[t,"l1",r]*RC["FD", r, t,m,s])
 @constraint(mod, fd1_2[r in R, t in T,m in M, s in Scn], fdlim[t,"l1",r] <= RC["FD", r, t,m, s])
+
 #2 month
 @constraint(mod, fd2_1[r in R, t in T,m in M, s in Scn], rcost_fd[r,t,m,s] == fdpr[t,"l2", r]*RC["FD", r, t,m,s])
 @constraint(mod, fd2_2[r in R, t in T,m in M, s in Scn], rcost_fd[r,t+1,m,s] == fdpr[t,"l2", r]*RC["FD", r, t+1,m,s])
 @constraint(mod, fd2_3[r in R, t in T,m in M, s in Scn], fdlim[t,"l2", r] <= RC["FD", r, t,m, s] )
 @constraint(mod, fd2_4[r in R, t in T,m in M, s in Scn], fdlim[t,"l2", r] <= RC["FD", r, t+1,m, s] )
-# month
+#3 month
 @constraint(mod, fd3_1[r in R, t in T,m in M, s in Scn], rcost_fd[r,t,m,s] == fdpr[t,"l3",r]*RC["FD", r, t,m,s])
 @constraint(mod, fd3_2[r in R, t in T,m in M, s in Scn], rcost_fd[r,t+1,m,s] == fdpr[t,"l3",r]*RC["FD", r, t+1,m,s])
 @constraint(mod, fd3_3[r in R, t in T,m in M, s in Scn], rcost_fd[r,t+2,m,s] == fdpr[t,"l3",r]*RC["FD", r, t+2,m,s])
 @constraint(mod, fd3_4[r in R, t in T,m in M, s in Scn], fdlim[t,"l3",r] <= RC["FD", r, t,m,s])
 @constraint(mod, fd3_5[r in R, t in T,m in M, s in Scn], fdlim[t,"l3",r] <= RC["FD", r, t+1,m,s])
 @constraint(mod, fd3_6[r in R, t in T,m in M, s in Scn], fdlim[t,"l3",r] <= RC["FD", r, t+2,m,s])
+
+# If choose a 2 month or 3 month length contract, the contract type for the raw material is already decided for those months
+# E.g if at time t we choose a 3 month contract, then the contract type for t+1 and t+2 must be fixed as FD since we are locked into that contract by definition
+@constraint(mod, fd_contract_fix_1[r in R, t in T, m in M], slack2_1[r,t+1,m]==1)
+@constraint(mod, fd_contract_fix_1_1[r in R, t in T, m in M], slack3_1[r,t+1,m]==1)
+@constraint(mod, fd_contract_fix_2[r in R, t in T, m in M], slack3_2[r,t+2,m]==1)
 
 for s in Scn
     for r in R
@@ -196,14 +213,22 @@ for s in Scn
                 local id = Symbol("fd_disjun_"*string(r)*string(t)*string(m))
                 add_disjunction!(mod, 
                 (fd1_1[r,t,m,s], fd1_2[r,t,m,s]),                                           #1 month 
-                (fd2_1[r,t,m,s], fd2_2[r,t,m,s], fd2_3[r,t,m,s], fd2_4[r,t,m,s]),                        #2 month
-                (fd3_1[r,t,m,s], fd3_2[r,t,m,s], fd3_3[r,t,m,s], fd3_4[r,t,m,s], fd3_5[r,t,m,s], fd3_6[r,t,m,s]), #3 month
-                reformulation=:big_m, name=id, M = bigM)
-                @constraint(mod,  z["FD", r, t, m] == mod[id][1] + mod[id][2] + mod[id][3] )
+                (fd2_1[r,t,m,s], fd2_2[r,t,m,s], fd2_3[r,t,m,s], fd2_4[r,t,m,s], fd_contract_fix_1[r, t, m] ),                        #2 month
+                (fd3_1[r,t,m,s], fd3_2[r,t,m,s], fd3_3[r,t,m,s], fd3_4[r,t,m,s], fd3_5[r,t,m,s], fd3_6[r,t,m,s], fd_contract_fix_1_1[r, t, m], fd_contract_fix_2[r, t, m]), #3 month
+                reformulation=:big_m, name=id, M=bigM)
+                @constraint(mod,  z["FD", r, t, m] == slack2_1[r,t,m] + slack3_1[r,t,m] + slack3_2[r,t,m] + mod[id][1] + mod[id][2] + mod[id][3] )
             end
         end
     end
 end 
+
+@constraint(mod, [r in R, t in T[2:end], m in M], slack2_1[r,t,m] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-1)*string(m))][2])
+@constraint(mod, [r in R, t in T[2:end], m in M], slack3_1[r,t,m] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-1)*string(m))][3])
+@constraint(mod, [r in R, t in T[3:end], m in M], slack3_2[r,t,m] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-2)*string(m))][3])
+
+@constraint(mod, [r in R, t in [202101, 202102, 202113, 202114, 202115], m in M], slack3_2[r,t,m] == 0)
+@constraint(mod, [r in R, t in [202101, 202113, 202114, 202115], m in M], slack3_1[r,t,m] == 0)
+@constraint(mod, [r in R, t in [202101, 202113, 202114, 202115], m in M], slack2_1[r,t,m] == 0)
 
 # Date fixes
 @constraint(mod, [i in P, m in M,c in C, s in Scn], I[i, m, 202100, c, s] == 0)
@@ -243,7 +268,14 @@ z_df = convert_jump_container_to_df(z)
 rename!(z_df, [:Contract, :RawMaterial, :Period, :Mill, :Used])
 rc_df = convert_jump_container_to_df(RC)
 rename!(rc_df, [:Contract, :RawMaterial, :Period, :Mill, :Scenario, :Amount])
-
+rcosts_fd_df = convert_jump_container_to_df(rcost_fd)
+rename!(rcosts_fd_df, [:RawMaterial, :Period, :Mill, :Scenario, :Amount])
+slack32_df = convert_jump_container_to_df(slack3_2)
+rename!(slack32_df, [:RawMaterial, :Period, :Mill, :Amount])
+slack31_df = convert_jump_container_to_df(slack3_1)
+rename!(slack31_df, [:RawMaterial, :Period, :Mill, :Amount])
+slack21_df = convert_jump_container_to_df(slack2_1)
+rename!(slack21_df, [:RawMaterial, :Period, :Mill, :Amount])
 
 print("------------RESULTS WRITING------------\n")
 
@@ -254,7 +286,11 @@ XLSX.writetable("RESULTS.xlsx", "Production" => x_df,
                                 "PMRunning" => y_df,
                                 "Contracts" => z_df,
                                 "RawMaterialContract" => rc_df,
-                                "RawMaterialPrices" => data["RawMaterialPrices"]
+                                "RawMaterialPrices" => data["RawMaterialPrices"],
+                                "FD_Costs" => rcosts_fd_df,
+                                "Slack32" => slack32_df,
+                                "Slack31" => slack31_df,
+                                "Slack21" => slack21_df
                                 )
 write_to_file(mod,"mylp.lp")
 print("------------ALL DONE------------\n")

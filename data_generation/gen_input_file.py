@@ -101,7 +101,10 @@ def gen_prices(raw_materials, contract_stages, spot_prices):
     for r in raw_materials:
         for m in calmonths:
             for idx, c in enumerate(contract_stages):
-                rates = [1.0,.9,.8]
+                if len(contract_stages) == 3:
+                    rates = [1.0,.9,.8]
+                else:
+                    rates = [1.0,.9,.8]
                 price = spot_prices.loc[(spot_prices['CALMONTH']==m) & (spot_prices['RAW MATERIAL']==r)][['METRIC']].values[0][0]
                 if idx == 0:
                     discount_factor = random.uniform(0.75,0.9)
