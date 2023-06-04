@@ -111,9 +111,9 @@ mod = Model(Gurobi.Optimizer)
 @variable(mod, fd_cost_tot>=0)
 @variable(mod, rcost_fd[R, T_fd_fix, M, Scn] >= 0)
 
-@variable(mod, slack2_1[R,T_fd_fix,M], Bin)
-@variable(mod, slack3_1[R,T_fd_fix,M], Bin)
-@variable(mod, slack3_2[R,T_fd_fix,M], Bin)
+@variable(mod, slack2_1[R,T_fd_fix,M,Scn], Bin)
+@variable(mod, slack3_1[R,T_fd_fix,M,Scn], Bin)
+@variable(mod, slack3_2[R,T_fd_fix,M,Scn], Bin)
 
 # Expressions
 @expression(mod, rcost_f, sum(RP[t,r,s]*RC["FIXED",r, t, m, s]*Prb[s] for r in R, t in T, m in M,s in Scn))
@@ -202,9 +202,9 @@ end
 
 # If choose a 2 month or 3 month length contract, the contract type for the raw material is already decided for those months
 # E.g if at time t we choose a 3 month contract, then the contract type for t+1 and t+2 must be fixed as FD since we are locked into that contract by definition
-@constraint(mod, fd_contract_fix_1[r in R, t in T, m in M], slack2_1[r,t+1,m]==1)
-@constraint(mod, fd_contract_fix_1_1[r in R, t in T, m in M], slack3_1[r,t+1,m]==1)
-@constraint(mod, fd_contract_fix_2[r in R, t in T, m in M], slack3_2[r,t+2,m]==1)
+@constraint(mod, fd_contract_fix_1[r in R, t in T, m in M, s in Scn], slack2_1[r,t+1,m,s] ==1)
+@constraint(mod, fd_contract_fix_1_1[r in R, t in T, m in M, s in Scn], slack3_1[r,t+1,m,s] ==1)
+@constraint(mod, fd_contract_fix_2[r in R, t in T, m in M, s in Scn], slack3_2[r,t+2,m,s] ==1)
 
 for s in Scn
     for r in R
@@ -213,22 +213,22 @@ for s in Scn
                 local id = Symbol("fd_disjun_"*string(r)*string(t)*string(m))
                 add_disjunction!(mod, 
                 (fd1_1[r,t,m,s], fd1_2[r,t,m,s]),                                           #1 month 
-                (fd2_1[r,t,m,s], fd2_2[r,t,m,s], fd2_3[r,t,m,s], fd2_4[r,t,m,s], fd_contract_fix_1[r, t, m] ),                        #2 month
-                (fd3_1[r,t,m,s], fd3_2[r,t,m,s], fd3_3[r,t,m,s], fd3_4[r,t,m,s], fd3_5[r,t,m,s], fd3_6[r,t,m,s], fd_contract_fix_1_1[r, t, m], fd_contract_fix_2[r, t, m]), #3 month
+                (fd2_1[r,t,m,s], fd2_2[r,t,m,s], fd2_3[r,t,m,s], fd2_4[r,t,m,s], fd_contract_fix_1[r, t, m,s]),                        #2 month
+                (fd3_1[r,t,m,s], fd3_2[r,t,m,s], fd3_3[r,t,m,s], fd3_4[r,t,m,s], fd3_5[r,t,m,s], fd3_6[r,t,m,s], fd_contract_fix_1_1[r, t, m,s], fd_contract_fix_2[r, t, m,s]), #3 month
                 reformulation=:big_m, name=id, M=bigM)
-                @constraint(mod,  z["FD", r, t, m] == slack2_1[r,t,m] + slack3_1[r,t,m] + slack3_2[r,t,m] + mod[id][1] + mod[id][2] + mod[id][3] )
+                @constraint(mod,  z["FD", r, t, m] == slack2_1[r,t,m,s] + slack3_1[r,t,m,s] + slack3_2[r,t,m,s] + mod[id][1] + mod[id][2] + mod[id][3] )
             end
         end
     end
 end 
 
-@constraint(mod, [r in R, t in T[2:end], m in M], slack2_1[r,t,m] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-1)*string(m))][2])
-@constraint(mod, [r in R, t in T[2:end], m in M], slack3_1[r,t,m] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-1)*string(m))][3])
-@constraint(mod, [r in R, t in T[3:end], m in M], slack3_2[r,t,m] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-2)*string(m))][3])
+@constraint(mod, [r in R, t in T[2:end], m in M, s in Scn], slack2_1[r,t,m,s] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-1)*string(m))][2])
+@constraint(mod, [r in R, t in T[2:end], m in M, s in Scn], slack3_1[r,t,m,s] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-1)*string(m))][3])
+@constraint(mod, [r in R, t in T[3:end], m in M, s in Scn], slack3_2[r,t,m,s] <=  mod[Symbol("fd_disjun_"*string(r)*string(t-2)*string(m))][3])
 
-@constraint(mod, [r in R, t in [202101, 202102, 202113, 202114, 202115], m in M], slack3_2[r,t,m] == 0)
-@constraint(mod, [r in R, t in [202101, 202113, 202114, 202115], m in M], slack3_1[r,t,m] == 0)
-@constraint(mod, [r in R, t in [202101, 202113, 202114, 202115], m in M], slack2_1[r,t,m] == 0)
+@constraint(mod, [r in R, t in [202101, 202102, 202113, 202114, 202115], m in M, s in Scn], slack3_2[r,t,m,s] == 0)
+@constraint(mod, [r in R, t in [202101, 202113, 202114, 202115], m in M, s in Scn], slack3_1[r,t,m,s] == 0)
+@constraint(mod, [r in R, t in [202101, 202113, 202114, 202115], m in M, s in Scn], slack2_1[r,t,m,s] == 0)
 
 # Date fixes
 @constraint(mod, [i in P, m in M,c in C, s in Scn], I[i, m, 202100, c, s] == 0)
@@ -271,11 +271,11 @@ rename!(rc_df, [:Contract, :RawMaterial, :Period, :Mill, :Scenario, :Amount])
 rcosts_fd_df = convert_jump_container_to_df(rcost_fd)
 rename!(rcosts_fd_df, [:RawMaterial, :Period, :Mill, :Scenario, :Amount])
 slack32_df = convert_jump_container_to_df(slack3_2)
-rename!(slack32_df, [:RawMaterial, :Period, :Mill, :Amount])
+rename!(slack32_df, [:RawMaterial, :Period, :Mill, :Scenario, :Amount])
 slack31_df = convert_jump_container_to_df(slack3_1)
-rename!(slack31_df, [:RawMaterial, :Period, :Mill, :Amount])
+rename!(slack31_df, [:RawMaterial, :Period, :Mill, :Scenario, :Amount])
 slack21_df = convert_jump_container_to_df(slack2_1)
-rename!(slack21_df, [:RawMaterial, :Period, :Mill, :Amount])
+rename!(slack21_df, [:RawMaterial, :Period, :Mill, :Scenario, :Amount])
 
 print("------------RESULTS WRITING------------\n")
 
