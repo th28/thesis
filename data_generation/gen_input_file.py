@@ -42,21 +42,14 @@ bs = MovingBlockBootstrap(3, pulp_prices)
 
 #parameters
 
-#pm_ct = 5
-#mill_ct = pm_ct
-#scn_ct = 6
-#cust_ct = 4
-#prod_ct = 3
-#e_ct = 1
-#raw_mat_ct = 3
-
-pm_ct = 1
+pm_ct = 4
 mill_ct = pm_ct
-scn_ct = 1
-cust_ct = 1
-prod_ct = 1
+scn_ct = 7
+cust_ct = 4
+prod_ct = 3  
 e_ct = 1
-raw_mat_ct = 1
+raw_mat_ct = 3
+
 
 raw_materials = ["R"+str(i) for i in range(raw_mat_ct)]
 pms  = ["PM"+str(i) for i in range(pm_ct)]
