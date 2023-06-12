@@ -8,7 +8,7 @@ start_time = time.time()
       
 def save_excel_file(file_path):
     # Open the Excel file 
-    excel_app = xlwings.App(visible=False)
+    excel_app = xlwings.App(visible=False) 
     excel_book = excel_app.books.open(file_path)              
     excel_book.save()
     excel_book.close()

@@ -137,7 +137,7 @@ mod = Model(Gurobi.Optimizer)
 @constraint(mod, [t in T, r in R, m in M], sum(z[a, r, t, m] for a in A) <= 1)
 
 # Only exercise active Contracts
-@constraint(mod, [a in A, r in R, t in T, m in M, s in Scn], RC[a, r, t, m, s] <= bigM*z[a, r, t, m] )
+@constraint(mod, [a in A, r in R, t in T, m in M, s in Scn], RC[a, r, t, m, s] <= bigM*z[a, r, t] )
 
 
 # How the DisjunctiveProgramming.jl module works is that first you define the constraints as you would usually do. Then add_disjunction! reads in
@@ -222,7 +222,7 @@ end
 
 @constraint(mod, [r in R, t in T, m in M],  z["FD", r, t, m] == slack2_1[r,t,m] + slack3_1[r,t,m] + slack3_2[r,t,m] + mod[Symbol("fd_disjun_"*string(r)*string(t)*string(m))][1] + mod[Symbol("fd_disjun_"*string(r)*string(t)*string(m))][2] + mod[Symbol("fd_disjun_"*string(r)*string(t)*string(m))][3] )
 #@constraint(mod, z["FD","R0",202101,"M0"] == 1)
-@constraint(mod, mod[Symbol("fd_disjun_R0202101M0")][3] == 1)
+#@constraint(mod, mod[Symbol("fd_disjun_R0202101M0")][3] == 1)
 
 @constraint(mod, [r in R, t in T[2:end], m in M], slack2_1[r,t,m] == mod[Symbol("fd_disjun_"*string(r)*string(t-1)*string(m))][2])
 @constraint(mod, [r in R, t in T[2:end], m in M], slack3_1[r,t,m] == mod[Symbol("fd_disjun_"*string(r)*string(t-1)*string(m))][3])
@@ -255,7 +255,7 @@ end
 print("------------DEFINING MODEL DONE------------\n")
 write_to_file(mod,"mylp.lp")
 print("------------OPT START------------\n")
-set_optimizer_attribute(mod, "MIPFocus", 2)
+set_optimizer_attribute(mod, "MIPFocus", 3)
 set_optimizer_attribute(mod, "MIPGap", 0.0005)
 optimize!(mod)
 print("------------OPT DONE------------\n")

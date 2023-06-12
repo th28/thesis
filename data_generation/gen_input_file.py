@@ -42,7 +42,7 @@ bs = MovingBlockBootstrap(3, pulp_prices)
 
 #parameters
 
-pm_ct = 4
+pm_ct = 5
 mill_ct = pm_ct
 scn_ct = 7
 cust_ct = 4
