@@ -68,3 +68,18 @@ function invert_dict(dict, warning::Bool = false)
 
     return new_dict
 end
+
+
+function xl_to_df(file_name)
+    file = file_name
+
+    xf = XLSX.readxlsx(file)
+    sheet_names = XLSX.sheetnames(xf)
+    data = Dict()
+
+    for sheet in sheet_names 
+        data[sheet] = DataFrame(XLSX.readtable(file, sheet)...)
+    end
+
+    return data
+end

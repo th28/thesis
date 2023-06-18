@@ -7,6 +7,7 @@ import numpy as np
 from arch.bootstrap import MovingBlockBootstrap
 import os
 import math
+import copy
 from pathlib import Path
 import xlwings
 
@@ -34,6 +35,7 @@ sheets = [
 
 #pulprice raw material data
 pulp_prices = pd.read_excel(r'C:\Users\Tom\Documents\Thesis\dev\data_generation\pulp_prices.xls')
+
 pulp_prices["date"] = pd.to_datetime(pulp_prices["date"])
 pulp_prices.index = pulp_prices["date"]
 pulp_prices = pulp_prices.drop(columns=["date"])
@@ -42,13 +44,13 @@ bs = MovingBlockBootstrap(3, pulp_prices)
 
 #parameters
 
-pm_ct = 5
+pm_ct = 2
 mill_ct = pm_ct
-scn_ct = 7
-cust_ct = 4
+scn_ct = 5
+cust_ct = 3
 prod_ct = 3  
 e_ct = 1
-raw_mat_ct = 3
+raw_mat_ct = 2
 
 
 raw_materials = ["R"+str(i) for i in range(raw_mat_ct)]
@@ -154,7 +156,8 @@ def gen_cust_dem_tab():
 def gen_fixed_costs():
     df = pd.DataFrame(columns=["PM","METRIC"])
     for p in pms:
-        row = {"PM": p, "METRIC": 0}
+        mod = random.random()
+        row = {"PM": p, "METRIC": 100 + 500*mod}
         df = df.append(row, ignore_index=True)
     
     return df
@@ -210,7 +213,8 @@ def gen_logistic_costs():
 def gen_storage_caps():
     df = pd.DataFrame(columns=["MILL", "METRIC"])
     for m in mills:
-        row = {"MILL": m, "METRIC": 100000}
+        mod = random.random()
+        row = {"MILL": m, "METRIC": 5000 + mod*10000}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -218,7 +222,8 @@ def gen_storage_caps():
 def gen_storage_costs():
     df = pd.DataFrame(columns=["MILL", "METRIC"])
     for m in mills:
-        row = {"MILL": m, "METRIC": 0}
+        mod = random.random()
+        row = {"MILL": m, "METRIC": 30 + mod*100}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -226,7 +231,8 @@ def gen_storage_costs():
 def gen_caps():
     df = pd.DataFrame(columns=["PM", "METRIC"])
     for pm in pms:
-        row = {"PM": pm, "METRIC": 100000}
+        mod = random.random()
+        row = {"PM": pm, "METRIC":  9000 + mod*100000}
         df = df.append(row, ignore_index=True)
 
     return df
@@ -235,7 +241,8 @@ def gen_prod_prices():
     df = pd.DataFrame(columns=["CALMONTH", "PRODUCT", "METRIC"])
     for c in calmonths:
         for p in prods:
-            row = {"CALMONTH":c, "PRODUCT": p, "METRIC": 1000}
+            mod = random.random()
+            row = {"CALMONTH":c, "PRODUCT": p, "METRIC": (10+1000*mod)}
             df = df.append(row, ignore_index=True)
     
     return df
@@ -294,17 +301,31 @@ input_file["Periods"] = gen_periods()
 input_file["Customers"] = gen_custs()
 input_file["RawMaterials"] = gen_mat()
 
+#Modify for vss calc
+input_file_det = copy.deepcopy(input_file)
+input_file_det["CustomerDemand"] = input_file["CustomerDemand"][['CALMONTH','CUSTOMER','PRODUCT','METRIC']].groupby(['CALMONTH','CUSTOMER','PRODUCT']).mean().reset_index()
+input_file_det["CustomerDemand"]['SCENARIO'] = 'S0'
+input_file_det["CustomerDemand"] = input_file_det["CustomerDemand"][['CALMONTH','CUSTOMER','PRODUCT','SCENARIO','METRIC']]
+input_file_det["RawMaterialPrices"] = raw_mat_prices[['CALMONTH','RAW MATERIAL', 'METRIC']].groupby(['CALMONTH', 'RAW MATERIAL']).mean().reset_index()
+input_file_det['RawMaterialPrices']['SCENARIO'] = 'S0'
+input_file_det['RawMaterialPrices'] = input_file_det['RawMaterialPrices'][['CALMONTH','RAW MATERIAL','SCENARIO','METRIC']]
+input_file_det['Scenarios'] = gen_scenarios_tab(1)
+
 input_path = Path('C:\\Users\\Tom\\Documents\\Thesis\\dev\\INPUT.xlsx')
+input_path_det = Path('C:\\Users\\Tom\\Documents\\Thesis\\dev\\INPUT_det.xlsx')
 try:
     os.remove(input_path)
+    os.remove(input_path_det)
 except OSError:
     pass
 
 writer = pd.ExcelWriter(input_path, engine='openpyxl') 
-
 for sheet_name, df in input_file.items():
     df.to_excel(writer, sheet_name=sheet_name, index=False)
+writer.save()
 
-
+writer = pd.ExcelWriter(input_path_det, engine='openpyxl') 
+for sheet_name, df in input_file_det.items():
+    df.to_excel(writer, sheet_name=sheet_name, index=False)
 writer.save()
 
