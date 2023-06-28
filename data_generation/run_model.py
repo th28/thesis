@@ -22,7 +22,7 @@ p.communicate()
 end_time = time.time()
 
 elapsed_minutes = (end_time - start_time)/60.0
-print("Run time: " + str(round(elapsed_minutes,2)) + " minutes.")
+print("\nRun time: " + str(round(elapsed_minutes,2)) + " minutes. \r\n")
 
 save_excel_file(file_path='C:\\Users\\Tom\\Documents\\Thesis\\dev\\RESULTS.xlsx')
 
