@@ -50,7 +50,7 @@ def gen_file(file_name):
 
     pm_ct = 1
     mill_ct = pm_ct
-    scn_ct = 20
+    scn_ct = 1
     cust_ct = 1
     prod_ct = 1 
     e_ct = 1
@@ -263,7 +263,7 @@ def gen_file(file_name):
         df = pd.DataFrame(columns=["MILL", "METRIC"])
         for m in mills:
             mod = random.random()
-            row = {"MILL": m, "METRIC": 200}
+            row = {"MILL": m, "METRIC": 300}
             df = df.append(row, ignore_index=True)
 
         return df
@@ -315,7 +315,7 @@ def gen_file(file_name):
     input_file["Contracts"] = gen_contracts()
 
     input_file["PM"] = gen_pms_tab(pm_ct=pm_ct)
-    input_file["CustomerDemand"] = generate_customer_demand(customers=customers, products=prods)#gen_cust_dem_tab()  #generate_customer_demand(customers=customers, products=prods)#
+    input_file["CustomerDemand"] = gen_cust_dem_tab()#generate_customer_demand(customers=customers, products=prods)#gen_cust_dem_tab()  #generate_customer_demand(customers=customers, products=prods)#
     input_file["FixedCosts"] = gen_fixed_costs()
     input_file["RawMaterialConversion"] = gen_raw_mat_conv()
     raw_mat_prices = gen_raw_mat_prices()

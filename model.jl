@@ -313,8 +313,8 @@ function run_model(input_file, output_file, vss_flag, scenario, no_contracts)
 end
 
 
-stoc = true
-det_basic = false
+stoc = false
+det_basic = true
 
 if stoc == true
     columnnames = ["Instance", "RP","EV", "VSS","VSS Pct. Chg","EVPI","EVPI Pct. Chg"]
